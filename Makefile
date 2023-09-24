@@ -7,7 +7,7 @@ debug:
 	odin build src -out:build/teluria_debug.exe -debug
 
 run:
-	odin run src
+	odin run src -out:build/teluria.exe
 
 check:
 	odin check src
