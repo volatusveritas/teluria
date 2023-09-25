@@ -30,7 +30,7 @@ MONITOR_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
 MONITOR_X      : i32 : PADDING
 MONITOR_Y      : i32 : PADDING
 
-CURSOR_WIDTH : f32 : 1.5
+CURSOR_WIDTH : f32 : f32(FONT_SIZE) / 16.0
 
 DELETION_THRESHOLD : int : 30
 DELETION_DELAY     : int : 2
@@ -106,6 +106,8 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
             deletion_ticks -= DELETION_DELAY
         }
 
+        line_input.offset -= 1
+
         for (
             line_input_get_text_width(line_input, font) < f32(MAX_INPUT_WIDTH)
             && line_input.offset > 0
@@ -113,6 +115,8 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
         {
             line_input.offset -= 1
         }
+
+        line_input.offset += 1
 
         return
     }
