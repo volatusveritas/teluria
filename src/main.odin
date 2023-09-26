@@ -18,17 +18,21 @@ COLOR_CURSOR     : raylib.Color : raylib.GRAY
 FONT_SIZE : i32 : 32
 
 PADDING      : i32 : FONT_SIZE / 3
-TEXT_PADDING : i32 : FONT_SIZE / 6
+TEXT_PADDING : i32 : FONT_SIZE / 4
 
 LINE_INPUT_HEIGHT : i32 : FONT_SIZE + 2 * TEXT_PADDING
 LINE_INPUT_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
 LINE_INPUT_X      : i32 : PADDING
 LINE_INPUT_Y      : i32 : SCREEN_HEIGHT - LINE_INPUT_HEIGHT - PADDING
+LINE_INPUT_RADIUS : f32 : 16.0 / f32(LINE_INPUT_HEIGHT)
+LINE_INPUT_SEGS   : i32 : 16
 
 MONITOR_HEIGHT : i32 : SCREEN_HEIGHT - 3 * PADDING - LINE_INPUT_HEIGHT
 MONITOR_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
 MONITOR_X      : i32 : PADDING
 MONITOR_Y      : i32 : PADDING
+MONITOR_RADIUS : f32 : 16.0 / f32(MONITOR_HEIGHT)
+MONITOR_SEGS   : i32 : 16
 
 CURSOR_WIDTH : f32 : f32(FONT_SIZE) / 16.0
 
@@ -285,19 +289,27 @@ main :: proc()
 
         ClearBackground(COLOR_BACKGROUND)
 
-        DrawRectangle(
-            MONITOR_X,
-            MONITOR_Y,
-            MONITOR_WIDTH,
-            MONITOR_HEIGHT,
+        DrawRectangleRounded(
+            {
+                f32(MONITOR_X),
+                f32(MONITOR_Y),
+                f32(MONITOR_WIDTH),
+                f32(MONITOR_HEIGHT)
+            },
+            MONITOR_RADIUS,
+            MONITOR_SEGS,
             COLOR_TEXTBOX
         )
 
-        DrawRectangle(
-            LINE_INPUT_X,
-            LINE_INPUT_Y,
-            LINE_INPUT_WIDTH,
-            LINE_INPUT_HEIGHT,
+        DrawRectangleRounded(
+            {
+                f32(LINE_INPUT_X),
+                f32(LINE_INPUT_Y),
+                f32(LINE_INPUT_WIDTH),
+                f32(LINE_INPUT_HEIGHT)
+            },
+            LINE_INPUT_RADIUS,
+            LINE_INPUT_SEGS,
             COLOR_TEXTBOX
         )
 
