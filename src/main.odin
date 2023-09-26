@@ -1,6 +1,7 @@
 package teluria
 
 import "core:strings"
+import "core:fmt"
 
 import "vendor:raylib"
 // import lua "vendor:lua/5.4"
@@ -15,7 +16,7 @@ COLOR_TEXTBOX    : raylib.Color : raylib.RAYWHITE
 COLOR_TEXT       : raylib.Color : raylib.BLACK
 COLOR_CURSOR     : raylib.Color : raylib.GRAY
 
-FONT_SIZE : i32 : 32
+FONT_SIZE : i32 : 24
 
 PADDING      : i32 : FONT_SIZE / 3
 TEXT_PADDING : i32 : FONT_SIZE / 4
@@ -119,6 +120,12 @@ line_input_destroy :: proc(line_input: ^LineInput)
     strings.builder_destroy(&line_input.text)
 }
 
+line_input_reset :: proc(line_input: ^LineInput)
+{
+    line_input_destroy(line_input)
+    line_input^ = line_input_make()
+}
+
 line_input_get_text_width :: proc(
     line_input: ^LineInput,
     font: raylib.Font
@@ -130,6 +137,17 @@ line_input_get_text_width :: proc(
         f32(FONT_SIZE),
         0.0
     ).x
+}
+
+line_input_handle_control :: proc(line_input: ^LineInput)
+{
+    using raylib
+
+    #partial switch GetKeyPressed()
+    {
+        case KeyboardKey.U:
+            line_input_reset(line_input)
+    }
 }
 
 line_input_handle_input :: proc(
@@ -190,6 +208,14 @@ line_input_handle_input :: proc(
     }
 
     deletion_ticks = 0
+
+    if (
+        IsKeyDown(KeyboardKey.LEFT_CONTROL) || IsKeyDown(KeyboardKey.RIGHT_CONTROL)
+    )
+    {
+        line_input_handle_control(line_input)
+        return
+    }
 
     c: rune = GetCharPressed()
 
