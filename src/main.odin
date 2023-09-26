@@ -37,6 +37,61 @@ DELETION_DELAY     : int : 2
 
 MAX_INPUT_WIDTH : i32 : LINE_INPUT_WIDTH - 2 * TEXT_PADDING
 
+SFX_TYPE_VOLUME : f32 : 0.20
+SFX_TYPE_POLYPHONY : int : 5
+
+SFX_DELETE_VOLUME : f32 : 0.10
+SFX_DELETE_POLYPHONY : int : 5
+
+SFX_SPACE_VOLUME : f32 : 0.20
+SFX_SPACE_POLYPHONY : int : 1
+
+MultiSoundPlayer :: struct
+{
+    sounds: [dynamic]raylib.Sound,
+    polyphony: int,
+    next: int
+}
+
+multi_sound_player_make :: proc(
+    file_name: cstring,
+    volume: f32,
+    polyphony: int
+) -> MultiSoundPlayer
+{
+    msp := MultiSoundPlayer { {}, polyphony, 0 }
+
+    reserve(&msp.sounds, polyphony)
+
+    for i in 0..<polyphony
+    {
+        append(&msp.sounds, raylib.LoadSound(file_name))
+        raylib.SetSoundVolume(msp.sounds[i], volume)
+    }
+
+    return msp
+}
+
+multi_sound_player_unload :: proc(msp: ^MultiSoundPlayer)
+{
+    for sound in msp.sounds
+    {
+        raylib.UnloadSound(sound)
+    }
+}
+
+multi_sound_player_play :: proc(msp: ^MultiSoundPlayer)
+{
+    if msp.next >= msp.polyphony - 1
+    {
+        msp.next = 0
+    }
+
+    raylib.PlaySound(msp.sounds[msp.next])
+
+    msp.next += 1
+}
+
 LineInput :: struct
 {
     text: strings.Builder,
@@ -73,7 +128,13 @@ line_input_get_text_width :: proc(
     ).x
 }
 
-line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
+line_input_handle_input :: proc(
+    line_input: ^LineInput,
+    font: raylib.Font,
+    msp_type: ^MultiSoundPlayer,
+    msp_delete: ^MultiSoundPlayer,
+    msp_space: ^MultiSoundPlayer
+)
 {
     using raylib
 
@@ -88,7 +149,7 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
 
     if (
         IsKeyDown(KeyboardKey.BACKSPACE)
-        && strings.builder_len(line_input.text) > 0
+        && strings.builder_len(line_input.text) > 1
     )
     {
         strings.pop_rune(&line_input.text)
@@ -97,6 +158,7 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
         if IsKeyPressed(KeyboardKey.BACKSPACE)
         {
             strings.pop_rune(&line_input.text)
+            multi_sound_player_play(msp_delete)
         }
 
         deletion_ticks += 1
@@ -104,13 +166,15 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
         if deletion_ticks >= DELETION_THRESHOLD + DELETION_DELAY {
             strings.pop_rune(&line_input.text)
             deletion_ticks -= DELETION_DELAY
+            multi_sound_player_play(msp_delete)
         }
 
+        // TODO: improve this, this is hard to read and probably unclear
         line_input.offset -= 1
 
         for (
             line_input_get_text_width(line_input, font) < f32(MAX_INPUT_WIDTH)
-            && line_input.offset > 0
+            && line_input.offset >= 0
         )
         {
             line_input.offset -= 1
@@ -129,6 +193,14 @@ line_input_capture_input :: proc(line_input: ^LineInput, font: raylib.Font)
     {
         strings.pop_rune(&line_input.text)
         modified = true
+
+        switch c
+        {
+            case ' ':
+                multi_sound_player_play(msp_space)
+            case:
+                multi_sound_player_play(msp_type)
+        }
     }
 
     for ; c != 0; c = GetCharPressed()
@@ -147,6 +219,19 @@ line_input_to_cstring :: proc(line_input: ^LineInput) -> cstring
     return cstring(raw_data(strings.to_string(line_input.text))[line_input.offset:])
 }
 
+handle_command :: proc(cmd: cstring)
+{
+    // TODO: handle the error here
+    sections := strings.split(string(cmd), " ")
+
+    switch sections[0]
+    {
+        case "say":
+        case:
+            // Look into the Lua custom commands
+    }
+}
+
 main :: proc()
 {
     using raylib
@@ -154,16 +239,46 @@ main :: proc()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     defer CloseWindow()
 
+    InitAudioDevice()
+    defer CloseAudioDevice()
+
     SetTargetFPS(SCREEN_FPS)
 
     serif_font := LoadFontEx("assets/font/s_regular.ttf", FONT_SIZE, nil, 0)
     defer UnloadFont(serif_font)
 
+    msp_type := multi_sound_player_make(
+        "assets/sfx/keyboard_type.mp3",
+        SFX_TYPE_VOLUME,
+        SFX_TYPE_POLYPHONY
+    )
+    defer multi_sound_player_unload(&msp_type)
+
+    msp_delete := multi_sound_player_make(
+        "assets/sfx/keyboard_delete.mp3",
+        SFX_DELETE_VOLUME,
+        SFX_DELETE_POLYPHONY
+    )
+    defer multi_sound_player_unload(&msp_delete)
+
+    msp_space := multi_sound_player_make(
+        "assets/sfx/keyboard_space.mp3",
+        SFX_SPACE_VOLUME,
+        SFX_SPACE_POLYPHONY
+    )
+    defer multi_sound_player_unload(&msp_space)
+
     line_input := line_input_make()
     defer line_input_destroy(&line_input)
 
     for !WindowShouldClose() {
-        line_input_capture_input(&line_input, serif_font)
+        line_input_handle_input(
+            &line_input,
+            serif_font,
+            &msp_type,
+            &msp_delete,
+            &msp_space
+        )
 
         BeginDrawing()
         defer EndDrawing()
@@ -204,7 +319,7 @@ main :: proc()
         )
         
         // TODO: make this non-static
-        // @(static) cursor_target_offset = line_input_text_width
+        // cursor_target_offset := line_input_text_width
         @(static) cursor_offset: f32 = 0.0
 
         cursor_offset += (
