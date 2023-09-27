@@ -36,6 +36,7 @@ MONITOR_RADIUS : f32 : 16.0 / f32(MONITOR_HEIGHT)
 MONITOR_SEGS   : i32 : 16
 
 CURSOR_WIDTH : f32 : f32(FONT_SIZE) / 16.0
+CURSOR_SPEED : f32 : 16.0
 
 DELETION_THRESHOLD : int : 30
 DELETION_DELAY     : int : 2
@@ -356,7 +357,9 @@ main :: proc()
         )
 
         cursor_offset += (
-            (line_input_text_width - cursor_offset) * GetFrameTime() * 16.0
+            (line_input_text_width - cursor_offset)
+            * GetFrameTime()
+            * CURSOR_SPEED
         )
 
         DrawLineEx(
