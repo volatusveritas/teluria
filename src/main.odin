@@ -298,6 +298,8 @@ main :: proc()
     line_input := line_input_make()
     defer line_input_destroy(&line_input)
 
+    cursor_offset: f32 = 0.0
+
     for !WindowShouldClose() {
         line_input_handle_input(
             &line_input,
@@ -352,10 +354,6 @@ main :: proc()
             &line_input,
             serif_font
         )
-        
-        // TODO: make this non-static
-        // cursor_target_offset := line_input_text_width
-        @(static) cursor_offset: f32 = 0.0
 
         cursor_offset += (
             (line_input_text_width - cursor_offset) * GetFrameTime() * 16.0
