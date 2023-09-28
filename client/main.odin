@@ -1,4 +1,4 @@
-package teluria
+package client
 
 import "core:strings"
 import "core:fmt"
