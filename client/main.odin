@@ -13,11 +13,12 @@ SCREEN_FPS    : i32 : 60
 
 COLOR_BACKGROUND : raylib.Color : raylib.LIGHTGRAY
 COLOR_TEXTBOX    : raylib.Color : raylib.RAYWHITE
-COLOR_TEXT       : raylib.Color : raylib.BLACK
 COLOR_CURSOR     : raylib.Color : raylib.GRAY
 COLOR_OFFSET_BOX : raylib.Color : raylib.BLUE
+COLOR_TEXT       : raylib.Color : raylib.BLACK
 
-FONT_SIZE : i32 : 24
+FONT_SIZE    : i32 : 16
+FONT_SPACING : f32 = 0.0
 
 PADDING      : i32 : FONT_SIZE / 3
 TEXT_PADDING : i32 : FONT_SIZE / 4
@@ -101,10 +102,37 @@ multi_sound_player_play :: proc(msp: ^MultiSoundPlayer)
     msp.next += 1
 }
 
+Monitor :: struct
+{
+    lines: [dynamic]cstring,
+    colors: [dynamic]raylib.Color,
+}
+
+monitor_make :: proc() -> Monitor
+{
+    return Monitor { {}, {} }
+}
+
+monitor_destroy :: proc(m: ^Monitor)
+{
+    delete(m.lines)
+    delete(m.colors)
+}
+
+monitor_append_line :: proc(
+    m: ^Monitor,
+    line: cstring,
+    color: raylib.Color = COLOR_TEXT
+)
+{
+    append(&m.lines, line)
+    append(&m.colors, color)
+}
+
 LineInput :: struct
 {
     text: strings.Builder,
-    offset: i32
+    offset: i32,
 }
 
 line_input_make :: proc() -> LineInput
@@ -304,6 +332,14 @@ main :: proc()
 
     cursor_offset: f32 = 0.0
 
+    monitor := monitor_make()
+    defer monitor_destroy(&monitor)
+
+    monitor_append_line(&monitor, "This would be a comment.", GRAY)
+    monitor_append_line(&monitor, "You have been hit.", RED)
+    monitor_append_line(&monitor, "Someone casts a spell.", PURPLE)
+    monitor_append_line(&monitor, "You have been healed.", LIME)
+
     for !WindowShouldClose() {
         line_input_handle_input(
             &line_input,
@@ -350,7 +386,7 @@ main :: proc()
                 f32(LINE_INPUT_Y + TEXT_PADDING)
             },
             f32(FONT_SIZE),
-            0.0,
+            FONT_SPACING,
             COLOR_TEXT
         )
 
@@ -377,5 +413,20 @@ main :: proc()
             CURSOR_WIDTH,
             COLOR_CURSOR
         )
+
+        for i in 0..<len(monitor.lines)
+        {
+            DrawTextEx(
+                serif_font,
+                monitor.lines[i],
+                {
+                    f32(MONITOR_X + TEXT_PADDING),
+                    f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
+                },
+                f32(FONT_SIZE),
+                FONT_SPACING,
+                monitor.colors[i]
+            )
+        }
     }
 }
