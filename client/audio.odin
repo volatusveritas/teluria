@@ -4,9 +4,63 @@ import "core:mem"
 
 import "vendor:miniaudio"
 
-MAXIMUM_SOUND_POLIPHONY : int : 16
+/*
+EXPLANATION OF TERMS:
 
-SoundMap :: map[cstring](^[MAXIMUM_SOUND_POLIPHONY]miniaudio.sound)
+- Audio Engine: the underlying audio engine provided by Miniaudio.
+- Sound Engine: Teluria's Sound Engine which supports polyphony.
+- Sound Bank: a collection of sounds that can be playd polyphonically.
+*/
+
+MAXIMUM_SOUND_POLYPHONY : int : 16
+
+SoundMap :: map[cstring]SoundBank
+
+SoundBank :: struct
+{
+    sounds: ^[MAXIMUM_SOUND_POLYPHONY]miniaudio.sound,
+    next: int,
+}
+
+sound_bank_make :: proc() -> (SoundBank, bool)
+{
+    ptr, alloc_err := mem.alloc(
+        size_of(miniaudio.sound) * MAXIMUM_SOUND_POLYPHONY
+    )
+
+    if alloc_err != .None do return {}, false
+
+    sound_arr := (^[MAXIMUM_SOUND_POLYPHONY]miniaudio.sound)(ptr)
+
+    return SoundBank{sound_arr, 0}, true
+}
+
+sound_bank_destroy :: proc(sb: ^SoundBank)
+{
+    free(sb.sounds)
+    sb.next = -1
+}
+
+sound_bank_play :: proc(sb: ^SoundBank) -> bool
+{
+    result: miniaudio.result
+
+    result = miniaudio.sound_seek_to_pcm_frame(&sb.sounds[sb.next], 0)
+    
+    if result != .SUCCESS do return false
+
+    result = miniaudio.sound_start(&sb.sounds[sb.next])
+
+    if result != .SUCCESS do return false
+
+    sb.next += 1
+    if sb.next >= MAXIMUM_SOUND_POLYPHONY
+    {
+        sb.next = 0
+    }
+
+    return true
+}
 
 audio_engine_make :: proc() -> (^miniaudio.engine, bool)
 {
@@ -46,58 +100,57 @@ sound_engine_register_sound :: proc(
     path: cstring
 ) -> bool
 {
-    ptr, alloc_err := mem.alloc(
-        size_of(miniaudio.sound) * MAXIMUM_SOUND_POLIPHONY
-    )
+    sb, ok := sound_bank_make()
 
-    if alloc_err != .None do return false
-
-    sound_arr := (^[MAXIMUM_SOUND_POLIPHONY]miniaudio.sound)(ptr)
+    if !ok do return false
 
     result: miniaudio.result
 
     result = miniaudio.sound_init_from_file(
-        se.audio_engine, path, 0, nil, nil, &sound_arr[0]
+        se.audio_engine, path, 0, nil, nil, &sb.sounds[0]
     )
 
     if result != .SUCCESS
     {
-        free(ptr)
+        sound_bank_destroy(&sb)
         return false
     }
 
-    for i in 1..<MAXIMUM_SOUND_POLIPHONY
+    for i in 1..<MAXIMUM_SOUND_POLYPHONY
     {
         result = miniaudio.sound_init_copy(
-            se.audio_engine, &sound_arr[0], 0, nil, &sound_arr[i]
+            se.audio_engine, &sb.sounds[0], 0, nil, &sb.sounds[i]
         )
 
         if result != .SUCCESS
         {
-            for idx in 0..<i do miniaudio.sound_uninit(&sound_arr[idx])
-            free(ptr)
-
+            for idx in 0..<i do miniaudio.sound_uninit(&sb.sounds[idx])
+            sound_bank_destroy(&sb)
             return false
         }
     }
 
-    se.sound_map[key] = sound_arr
+    se.sound_map[key] = sb
 
     return true
 }
 
 sound_engine_remove_sound :: proc(se: ^SoundEngine, key: cstring)
 {
-    sound_arr := se.sound_map[key]
+    sb := se.sound_map[key]
 
-    for i in 0..<MAXIMUM_SOUND_POLIPHONY
+    for i in 0..<MAXIMUM_SOUND_POLYPHONY
     {
-        miniaudio.sound_uninit(&sound_arr[i])
+        miniaudio.sound_uninit(&sb.sounds[i])
     }
 
-    free(sound_arr)
-
+    sound_bank_destroy(&sb)
     delete_key(&se.sound_map, key)
+}
+
+sound_engine_play :: proc(se: ^SoundEngine, key: cstring) -> bool
+{
+    return sound_bank_play(&se.sound_map[key])
 }
 
 sound_engine_make :: proc() -> (SoundEngine, bool)

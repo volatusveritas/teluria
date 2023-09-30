@@ -167,7 +167,11 @@ line_input_handle_control :: proc(li: ^LineInput)
     }
 }
 
-line_input_handle_input :: proc(li: ^LineInput, font: raylib.Font)
+line_input_handle_input :: proc(
+    li: ^LineInput,
+    font: raylib.Font,
+    sound_engine: ^SoundEngine
+)
 {
     using raylib
 
@@ -191,6 +195,7 @@ line_input_handle_input :: proc(li: ^LineInput, font: raylib.Font)
         if IsKeyPressed(KeyboardKey.BACKSPACE)
         {
             strings.pop_rune(&li.text)
+            sound_engine_play(sound_engine, "kb_delete")
         }
 
         deletion_ticks += 1
@@ -198,6 +203,7 @@ line_input_handle_input :: proc(li: ^LineInput, font: raylib.Font)
         if deletion_ticks >= DELETION_THRESHOLD + DELETION_DELAY {
             strings.pop_rune(&li.text)
             deletion_ticks -= DELETION_DELAY
+            sound_engine_play(sound_engine, "kb_delete")
         }
 
         // TODO: improve this, this is hard to read and probably unclear
@@ -232,6 +238,15 @@ line_input_handle_input :: proc(li: ^LineInput, font: raylib.Font)
     {
         strings.pop_rune(&li.text)
         modified = true
+
+        if c == ' '
+        {
+            sound_engine_play(sound_engine, "kb_space")
+        }
+        else
+        {
+            sound_engine_play(sound_engine, "kb_type")
+        }
     }
 
     for ; c != 0; c = GetCharPressed()
@@ -439,7 +454,7 @@ main :: proc()
             monitor_append_line(&monitor, "Connection failed.")
         }
 
-        line_input_handle_input(&line_input, serif_font)
+        line_input_handle_input(&line_input, serif_font, &sound_engine)
 
         BeginDrawing()
         defer EndDrawing()
