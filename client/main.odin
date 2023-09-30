@@ -2,7 +2,9 @@ package client
 
 import "core:strings"
 import "core:fmt"
+import "core:mem"
 
+import enet "vendor:ENet"
 import "vendor:raylib"
 // import lua "vendor:lua/5.4"
 
@@ -56,52 +58,6 @@ SFX_DELETE_POLYPHONY : int : 5
 SFX_SPACE_VOLUME : f32 : 0.20
 SFX_SPACE_POLYPHONY : int : 1
 
-MultiSoundPlayer :: struct
-{
-    sounds: [dynamic]raylib.Sound,
-    polyphony: int,
-    next: int
-}
-
-multi_sound_player_make :: proc(
-    file_name: cstring,
-    volume: f32,
-    polyphony: int
-) -> MultiSoundPlayer
-{
-    msp := MultiSoundPlayer { {}, polyphony, 0 }
-
-    reserve(&msp.sounds, polyphony)
-
-    for i in 0..<polyphony
-    {
-        append(&msp.sounds, raylib.LoadSound(file_name))
-        raylib.SetSoundVolume(msp.sounds[i], volume)
-    }
-
-    return msp
-}
-
-multi_sound_player_unload :: proc(msp: ^MultiSoundPlayer)
-{
-    for sound in msp.sounds
-    {
-        raylib.UnloadSound(sound)
-    }
-}
-
-multi_sound_player_play :: proc(msp: ^MultiSoundPlayer)
-{
-    if msp.next >= msp.polyphony - 1
-    {
-        msp.next = 0
-    }
-
-    raylib.PlaySound(msp.sounds[msp.next])
-
-    msp.next += 1
-}
-
 Monitor :: struct
 {
     lines: [dynamic]cstring,
@@ -127,6 +83,38 @@ monitor_append_line :: proc(
 {
     append(&m.lines, line)
     append(&m.colors, color)
+}
+
+monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
+{
+    using raylib
+
+    DrawRectangleRounded(
+        {
+            f32(MONITOR_X),
+            f32(MONITOR_Y),
+            f32(MONITOR_WIDTH),
+            f32(MONITOR_HEIGHT)
+        },
+        MONITOR_RADIUS,
+        MONITOR_SEGS,
+        COLOR_TEXTBOX
+    )
+
+    for i in 0..<len(m.lines)
+    {
+        DrawTextEx(
+            font,
+            m.lines[i],
+            {
+                f32(MONITOR_X + TEXT_PADDING),
+                f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
+            },
+            f32(FONT_SIZE),
+            FONT_SPACING,
+            m.colors[i]
+        )
+    }
 }
 
 LineInput :: struct
@@ -179,13 +167,7 @@ line_input_handle_control :: proc(li: ^LineInput)
     }
 }
 
-line_input_handle_input :: proc(
-    li: ^LineInput,
-    font: raylib.Font,
-    msp_type: ^MultiSoundPlayer,
-    msp_delete: ^MultiSoundPlayer,
-    msp_space: ^MultiSoundPlayer
-)
+line_input_handle_input :: proc(li: ^LineInput, font: raylib.Font)
 {
     using raylib
 
@@ -209,7 +191,6 @@ line_input_handle_input :: proc(
         if IsKeyPressed(KeyboardKey.BACKSPACE)
         {
             strings.pop_rune(&li.text)
-            multi_sound_player_play(msp_delete)
         }
 
         deletion_ticks += 1
@@ -217,7 +198,6 @@ line_input_handle_input :: proc(
         if deletion_ticks >= DELETION_THRESHOLD + DELETION_DELAY {
             strings.pop_rune(&li.text)
             deletion_ticks -= DELETION_DELAY
-            multi_sound_player_play(msp_delete)
         }
 
         // TODO: improve this, this is hard to read and probably unclear
@@ -252,14 +232,6 @@ line_input_handle_input :: proc(
     {
         strings.pop_rune(&li.text)
         modified = true
-
-        switch c
-        {
-            case ' ':
-                multi_sound_player_play(msp_space)
-            case:
-                multi_sound_player_play(msp_type)
-        }
     }
 
     for ; c != 0; c = GetCharPressed()
@@ -276,6 +248,56 @@ line_input_handle_input :: proc(
 line_input_to_cstring :: proc(li: ^LineInput) -> cstring
 {
     return cstring(raw_data(strings.to_string(li.text))[li.offset:])
+}
+
+line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
+{
+    using raylib
+
+    @(static) cursor_offset: f32 = 0.0
+
+    DrawRectangleRounded(
+        {
+            f32(LINE_INPUT_X),
+            f32(LINE_INPUT_Y),
+            f32(LINE_INPUT_WIDTH),
+            f32(LINE_INPUT_HEIGHT)
+        },
+        LINE_INPUT_RADIUS,
+        LINE_INPUT_SEGS,
+        COLOR_TEXTBOX
+    )
+
+    DrawTextEx(
+        font,
+        line_input_to_cstring(li),
+        {
+            f32(LINE_INPUT_X + TEXT_PADDING),
+            f32(LINE_INPUT_Y + TEXT_PADDING)
+        },
+        f32(FONT_SIZE),
+        FONT_SPACING,
+        COLOR_TEXT
+    )
+
+    cursor_offset += (
+        (line_input_get_text_width(li, font) - cursor_offset)
+        * GetFrameTime()
+        * CURSOR_SPEED
+    )
+
+    DrawLineEx(
+        {
+            f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
+            f32(LINE_INPUT_Y + TEXT_PADDING)
+        },
+        {
+            f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
+            f32(LINE_INPUT_Y + TEXT_PADDING + FONT_SIZE)
+        },
+        CURSOR_WIDTH,
+        COLOR_CURSOR
+    )
 }
 
 handle_command :: proc(cmd: cstring)
@@ -298,135 +320,134 @@ main :: proc()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     defer CloseWindow()
 
-    InitAudioDevice()
-    defer CloseAudioDevice()
-
     SetTargetFPS(SCREEN_FPS)
 
     serif_font := LoadFontEx("assets/font/s_regular.ttf", FONT_SIZE, nil, 0)
     defer UnloadFont(serif_font)
 
-    msp_type := multi_sound_player_make(
-        "assets/sfx/keyboard_type.mp3",
-        SFX_TYPE_VOLUME,
-        SFX_TYPE_POLYPHONY
-    )
-    defer multi_sound_player_unload(&msp_type)
-
-    msp_delete := multi_sound_player_make(
-        "assets/sfx/keyboard_delete.mp3",
-        SFX_DELETE_VOLUME,
-        SFX_DELETE_POLYPHONY
-    )
-    defer multi_sound_player_unload(&msp_delete)
-
-    msp_space := multi_sound_player_make(
-        "assets/sfx/keyboard_space.mp3",
-        SFX_SPACE_VOLUME,
-        SFX_SPACE_POLYPHONY
-    )
-    defer multi_sound_player_unload(&msp_space)
+    monitor := monitor_make()
+    defer monitor_destroy(&monitor)
 
     line_input := line_input_make()
     defer line_input_destroy(&line_input)
 
-    cursor_offset: f32 = 0.0
+    sound_engine, ok := sound_engine_make()
 
-    monitor := monitor_make()
-    defer monitor_destroy(&monitor)
+    if !ok
+    {
+        fmt.println("Could not initialize the Sound Engine.")
+        return
+    }
 
-    monitor_append_line(&monitor, "This would be a comment.", GRAY)
-    monitor_append_line(&monitor, "You have been hit.", RED)
-    monitor_append_line(&monitor, "Someone casts a spell.", PURPLE)
-    monitor_append_line(&monitor, "You have been healed.", LIME)
+    defer sound_engine_destroy(&sound_engine)
+
+    ok = sound_engine_register_sound(
+        &sound_engine, "kb_type", "assets/sfx/kb_type.mp3"
+    )
+
+    if !ok
+    {
+        fmt.println("Failed to lead KB_TYPE.")
+        return
+    }
+
+    ok = sound_engine_register_sound(
+        &sound_engine, "kb_space", "assets/sfx/kb_space.mp3"
+    )
+
+    if !ok
+    {
+        fmt.println("Failed to lead KB_SPACE.")
+        return
+    }
+
+    ok = sound_engine_register_sound(
+        &sound_engine, "kb_delete", "assets/sfx/kb_delete.mp3"
+    )
+
+    if !ok
+    {
+        fmt.println("Failed to lead KB_DELETE.")
+        return
+    }
+
+    if enet.initialize() != 0
+    {
+        fmt.println("Could not initialize ENet.")
+        return
+    }
+
+    defer enet.deinitialize()
+
+    client := enet.host_create(nil, 1, 2, 0, 0)
+
+    if client == nil
+    {
+        fmt.println("Could not create the client.")
+        return
+    }
+
+    defer enet.host_destroy(client)
+
+    address := enet.Address{}
+
+    if enet.address_set_host(&address, "127.0.0.1") != 0
+    {
+        fmt.println("Could not resolve the host address.")
+        return
+    }
+
+    address.port = 25565
+
+    peer := enet.host_connect(client, &address, 2, 0)
+
+    if peer == nil
+    {
+        fmt.println("Could not connect to the foreign host.")
+        return
+    }
+
+    event := enet.Event{}
+
+    network_time: f32 = 0.0
+    connecting := false
+    connected := false
+
+    monitor_append_line(&monitor, "Connecting...")
 
     for !WindowShouldClose() {
-        line_input_handle_input(
-            &line_input,
-            serif_font,
-            &msp_type,
-            &msp_delete,
-            &msp_space
-        )
+        network_time += GetFrameTime()
+
+        if enet.host_service(client, &event, 0) < 0
+        {
+            fmt.println("Could not poll events.")
+            enet.peer_reset(peer)
+            return
+        }
+
+        if event.type == .CONNECT
+        {
+            connected = true
+            connecting = false
+            monitor_append_line(&monitor, "Successfully connected.")
+        }
+
+        if connecting && !connected && network_time >= 5.0
+        {
+            enet.peer_reset(peer)
+            connecting = false
+            monitor_append_line(&monitor, "Connection failed.")
+        }
+
+        line_input_handle_input(&line_input, serif_font)
 
         BeginDrawing()
         defer EndDrawing()
 
         ClearBackground(COLOR_BACKGROUND)
 
-        DrawRectangleRounded(
-            {
-                f32(MONITOR_X),
-                f32(MONITOR_Y),
-                f32(MONITOR_WIDTH),
-                f32(MONITOR_HEIGHT)
-            },
-            MONITOR_RADIUS,
-            MONITOR_SEGS,
-            COLOR_TEXTBOX
-        )
+        monitor_draw(&monitor, serif_font)
 
-        DrawRectangleRounded(
-            {
-                f32(LINE_INPUT_X),
-                f32(LINE_INPUT_Y),
-                f32(LINE_INPUT_WIDTH),
-                f32(LINE_INPUT_HEIGHT)
-            },
-            LINE_INPUT_RADIUS,
-            LINE_INPUT_SEGS,
-            COLOR_TEXTBOX
-        )
-
-        DrawTextEx(
-            serif_font,
-            line_input_to_cstring(&line_input),
-            {
-                f32(LINE_INPUT_X + TEXT_PADDING),
-                f32(LINE_INPUT_Y + TEXT_PADDING)
-            },
-            f32(FONT_SIZE),
-            FONT_SPACING,
-            COLOR_TEXT
-        )
-
-        line_input_text_width := line_input_get_text_width(
-            &line_input,
-            serif_font
-        )
-
-        cursor_offset += (
-            (line_input_text_width - cursor_offset)
-            * GetFrameTime()
-            * CURSOR_SPEED
-        )
-
-        DrawLineEx(
-            {
-                f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-                f32(LINE_INPUT_Y + TEXT_PADDING)
-            },
-            {
-                f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-                f32(LINE_INPUT_Y + TEXT_PADDING + FONT_SIZE)
-            },
-            CURSOR_WIDTH,
-            COLOR_CURSOR
-        )
-
-        for i in 0..<len(monitor.lines)
-        {
-            DrawTextEx(
-                serif_font,
-                monitor.lines[i],
-                {
-                    f32(MONITOR_X + TEXT_PADDING),
-                    f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
-                },
-                f32(FONT_SIZE),
-                FONT_SPACING,
-                monitor.colors[i]
-            )
-        }
+        line_input_draw(&line_input, serif_font)
     }
 }
