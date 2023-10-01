@@ -77,7 +77,7 @@ net_client_make :: proc() -> ^enet.Host
         CONNECTION_PEERS,
         CONNECTION_CHANNELS,
         CONNECTION_BANDWIDTH_IN,
-        CONNECTION_BANDWIDTH_OUT
+        CONNECTION_BANDWIDTH_OUT,
     )
 }
 
@@ -89,7 +89,7 @@ net_client_destroy :: proc(c: ^enet.Host)
 net_client_connect :: proc(
     c: ^enet.Host,
     host: cstring,
-    port: u16
+    port: u16,
 ) -> (^enet.Peer, NetErr)
 {
     address: enet.Address = { 0, port }

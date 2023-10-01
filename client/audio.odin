@@ -96,7 +96,7 @@ SoundEngine :: struct
 sound_engine_register_sound :: proc(
     se: ^SoundEngine,
     key: cstring,
-    path: cstring
+    path: cstring,
 ) -> bool
 {
     sb, ok := sound_bank_make()
@@ -106,7 +106,7 @@ sound_engine_register_sound :: proc(
     result: miniaudio.result
 
     result = miniaudio.sound_init_from_file(
-        se.audio_engine, path, 0, nil, nil, &sb.sounds[0]
+        se.audio_engine, path, 0, nil, nil, &sb.sounds[0],
     )
 
     if result != .SUCCESS
@@ -118,7 +118,7 @@ sound_engine_register_sound :: proc(
     for i in 1..<MAXIMUM_SOUND_POLYPHONY
     {
         result = miniaudio.sound_init_copy(
-            se.audio_engine, &sb.sounds[0], 0, nil, &sb.sounds[i]
+            se.audio_engine, &sb.sounds[0], 0, nil, &sb.sounds[i],
         )
 
         if result != .SUCCESS
@@ -160,7 +160,7 @@ sound_engine_make :: proc() -> (SoundEngine, bool)
 
     sound_engine := SoundEngine {
         audio_engine,
-        make(SoundMap)
+        make(SoundMap),
     }
 
     return sound_engine, true

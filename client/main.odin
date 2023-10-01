@@ -2,7 +2,6 @@ package client
 
 import "core:strings"
 import "core:fmt"
-import "core:mem"
 
 import enet "vendor:ENet"
 import "vendor:raylib"
@@ -81,7 +80,7 @@ monitor_destroy :: proc(m: ^Monitor)
 monitor_append_line :: proc(
     m: ^Monitor,
     line: cstring,
-    color: raylib.Color = COLOR_TEXT
+    color: raylib.Color = COLOR_TEXT,
 )
 {
     append(&m.lines, line)
@@ -97,11 +96,11 @@ monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
             f32(MONITOR_X),
             f32(MONITOR_Y),
             f32(MONITOR_WIDTH),
-            f32(MONITOR_HEIGHT)
+            f32(MONITOR_HEIGHT),
         },
         MONITOR_RADIUS,
         MONITOR_SEGS,
-        COLOR_TEXTBOX
+        COLOR_TEXTBOX,
     )
 
     for i in 0..<len(m.lines)
@@ -115,7 +114,7 @@ monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
             },
             f32(FONT_SIZE),
             FONT_SPACING,
-            m.colors[i]
+            m.colors[i],
         )
     }
 }
@@ -135,13 +134,13 @@ cmd_connect :: proc(monitor: ^Monitor, network: ^Network)
             monitor_append_line(
                 monitor,
                 "Failed to resolve the host.",
-                COLOR_MSG_ERR
+                COLOR_MSG_ERR,
             )
         case .ATTEMPT_CONNECTION:
             monitor_append_line(
                 monitor,
                 "Failed to make a connection attempt.",
-                COLOR_MSG_ERR
+                COLOR_MSG_ERR,
             )
     }
 }
@@ -173,7 +172,7 @@ line_input_make :: proc() -> LineInput
 {
     line_input := LineInput {
         strings.builder_make(),
-        0
+        0,
     }
 
     strings.write_rune(&line_input.text, 0)
@@ -198,7 +197,7 @@ line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
         font,
         line_input_to_cstring(li),
         f32(FONT_SIZE),
-        0.0
+        0.0,
     ).x
 }
 
@@ -217,7 +216,7 @@ line_input_handle_input :: proc(
     li: ^LineInput,
     font: raylib.Font,
     monitor: ^Monitor,
-    sound_engine: ^SoundEngine
+    sound_engine: ^SoundEngine,
 )
 {
     using raylib
@@ -324,11 +323,11 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
             f32(LINE_INPUT_X),
             f32(LINE_INPUT_Y),
             f32(LINE_INPUT_WIDTH),
-            f32(LINE_INPUT_HEIGHT)
+            f32(LINE_INPUT_HEIGHT),
         },
         LINE_INPUT_RADIUS,
         LINE_INPUT_SEGS,
-        COLOR_TEXTBOX
+        COLOR_TEXTBOX,
     )
 
     DrawTextEx(
@@ -336,11 +335,11 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
         line_input_to_cstring(li),
         {
             f32(LINE_INPUT_X + TEXT_PADDING),
-            f32(LINE_INPUT_Y + TEXT_PADDING)
+            f32(LINE_INPUT_Y + TEXT_PADDING),
         },
         f32(FONT_SIZE),
         FONT_SPACING,
-        COLOR_TEXT
+        COLOR_TEXT,
     )
 
     cursor_offset += (
@@ -352,14 +351,14 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
     DrawLineEx(
         {
             f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-            f32(LINE_INPUT_Y + TEXT_PADDING)
+            f32(LINE_INPUT_Y + TEXT_PADDING),
         },
         {
             f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-            f32(LINE_INPUT_Y + TEXT_PADDING + FONT_SIZE)
+            f32(LINE_INPUT_Y + TEXT_PADDING + FONT_SIZE),
         },
         CURSOR_WIDTH,
-        COLOR_CURSOR
+        COLOR_CURSOR,
     )
 }
 
@@ -392,7 +391,7 @@ main :: proc()
     defer sound_engine_destroy(&sound_engine)
 
     ok = sound_engine_register_sound(
-        &sound_engine, "kb_type", "assets/sfx/kb_type.mp3"
+        &sound_engine, "kb_type", "assets/sfx/kb_type.mp3",
     )
 
     if !ok
@@ -402,7 +401,7 @@ main :: proc()
     }
 
     ok = sound_engine_register_sound(
-        &sound_engine, "kb_space", "assets/sfx/kb_space.mp3"
+        &sound_engine, "kb_space", "assets/sfx/kb_space.mp3",
     )
 
     if !ok
@@ -412,7 +411,7 @@ main :: proc()
     }
 
     ok = sound_engine_register_sound(
-        &sound_engine, "kb_delete", "assets/sfx/kb_delete.mp3"
+        &sound_engine, "kb_delete", "assets/sfx/kb_delete.mp3",
     )
 
     if !ok
@@ -462,14 +461,14 @@ main :: proc()
                         monitor_append_line(
                             &monitor,
                             "Successfully connected.",
-                            COLOR_MSG_SUCCESS
+                            COLOR_MSG_SUCCESS,
                         )
                     case .DISCONNECT:
                         network.status = .STALLED
                         monitor_append_line(
                             &monitor,
                             "Disconnected from the server.",
-                            COLOR_TEXT
+                            COLOR_TEXT,
                         )
                     case .RECEIVE:
                         enet.packet_destroy(network.event.packet)
@@ -478,7 +477,7 @@ main :: proc()
                 monitor_append_line(
                     &monitor,
                     "An error ocurred while trying to poll events.",
-                    COLOR_MSG_ERR
+                    COLOR_MSG_ERR,
                 )
         }
 
@@ -489,20 +488,20 @@ main :: proc()
             monitor_append_line(
                 &monitor,
                 "Connection failed.",
-                COLOR_MSG_ERR
+                COLOR_MSG_ERR,
             )
         }
 
         if IsKeyPressed(KeyboardKey.ENTER)
         {
             handle_command(
-                line_input_to_cstring(&line_input), &monitor, &network
+                line_input_to_cstring(&line_input), &monitor, &network,
             )
         }
         else
         {
             line_input_handle_input(
-                &line_input, serif_font, &monitor, &sound_engine
+                &line_input, serif_font, &monitor, &sound_engine,
             )
         }
 
