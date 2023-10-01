@@ -458,6 +458,7 @@ main :: proc()
 
                     case .CONNECT:
                         network.status = .CONNECTED
+                        network.connection_time = 0.0
                         monitor_append_line(
                             &monitor,
                             "Successfully connected.",
@@ -485,6 +486,7 @@ main :: proc()
         {
             enet.peer_reset(network.peer)
             network.status = .STALLED
+            network.connection_time = 0.0
             monitor_append_line(
                 &monitor,
                 "Connection failed.",
@@ -497,6 +499,8 @@ main :: proc()
             handle_command(
                 line_input_to_cstring(&line_input), &monitor, &network,
             )
+
+            line_input_reset(&line_input)
         }
         else
         {
