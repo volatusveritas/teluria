@@ -19,6 +19,9 @@ COLOR_CURSOR     : raylib.Color : raylib.GRAY
 COLOR_OFFSET_BOX : raylib.Color : raylib.BLUE
 COLOR_TEXT       : raylib.Color : raylib.BLACK
 
+COLOR_MSG_ERR     : raylib.Color : raylib.RED
+COLOR_MSG_SUCCESS : raylib.Color : raylib.GREEN
+
 FONT_SIZE    : i32 : 16
 FONT_SPACING : f32 = 0.0
 
@@ -117,6 +120,49 @@ monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
     }
 }
 
+cmd_connect :: proc(monitor: ^Monitor, network: ^Network)
+{
+    peer, err := net_client_connect(network.client, "127.0.0.1", 25565)
+
+    network.peer = peer
+
+    switch err
+    {
+        case .SUCCESS:
+            network.status = .CONNECTING
+
+        case .RESOLVE_HOST:
+            monitor_append_line(
+                monitor,
+                "Failed to resolve the host.",
+                COLOR_MSG_ERR
+            )
+        case .ATTEMPT_CONNECTION:
+            monitor_append_line(
+                monitor,
+                "Failed to make a connection attempt.",
+                COLOR_MSG_ERR
+            )
+    }
+}
+
+handle_command :: proc(cmd: cstring, monitor: ^Monitor, network: ^Network)
+{
+    sections, err := strings.split(string(cmd), " ")
+
+    if err != nil do return
+
+    switch sections[0]
+    {
+        case "say":
+        case "connect":
+            monitor_append_line(monitor, "Connecting...")
+            cmd_connect(monitor, network)
+        case:
+            // Look into the Lua custom commands
+    }
+}
+
 LineInput :: struct
 {
     text: strings.Builder,
@@ -170,6 +216,7 @@ line_input_handle_control :: proc(li: ^LineInput)
 line_input_handle_input :: proc(
     li: ^LineInput,
     font: raylib.Font,
+    monitor: ^Monitor,
     sound_engine: ^SoundEngine
 )
 {
@@ -225,7 +272,8 @@ line_input_handle_input :: proc(
     deletion_ticks = 0
 
     if (
-        IsKeyDown(KeyboardKey.LEFT_CONTROL) || IsKeyDown(KeyboardKey.RIGHT_CONTROL)
+        IsKeyDown(KeyboardKey.LEFT_CONTROL)
+        || IsKeyDown(KeyboardKey.RIGHT_CONTROL)
     )
     {
         line_input_handle_control(li)
@@ -315,19 +363,6 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
     )
 }
 
-handle_command :: proc(cmd: cstring)
-{
-    // TODO: handle the error here
-    sections := strings.split(string(cmd), " ")
-
-    switch sections[0]
-    {
-        case "say":
-        case:
-            // Look into the Lua custom commands
-    }
-}
-
 main :: proc()
 {
     using raylib
@@ -386,75 +421,90 @@ main :: proc()
         return
     }
 
-    if enet.initialize() != 0
+    if !net_make()
     {
-        fmt.println("Could not initialize ENet.")
+        fmt.eprintln("Failed to initialize the networking engine.")
         return
     }
 
-    defer enet.deinitialize()
+    defer net_destroy()
 
-    client := enet.host_create(nil, 1, 2, 0, 0)
+    network: Network
 
-    if client == nil
+    network.client = net_client_make()
+
+    if network.client == nil
     {
-        fmt.println("Could not create the client.")
+        fmt.eprintln("Failed to initialize the network client.")
         return
     }
 
-    defer enet.host_destroy(client)
+    defer net_client_destroy(network.client)
 
-    address := enet.Address{}
-
-    if enet.address_set_host(&address, "127.0.0.1") != 0
+    for !WindowShouldClose()
     {
-        fmt.println("Could not resolve the host address.")
-        return
-    }
-
-    address.port = 25565
-
-    peer := enet.host_connect(client, &address, 2, 0)
-
-    if peer == nil
-    {
-        fmt.println("Could not connect to the foreign host.")
-        return
-    }
-
-    event := enet.Event{}
-
-    network_time: f32 = 0.0
-    connecting := false
-    connected := false
-
-    monitor_append_line(&monitor, "Connecting...")
-
-    for !WindowShouldClose() {
-        network_time += GetFrameTime()
-
-        if enet.host_service(client, &event, 0) < 0
+        if network.status == .CONNECTING
         {
-            fmt.println("Could not poll events.")
-            enet.peer_reset(peer)
-            return
+            network.connection_time += GetFrameTime()
         }
 
-        if event.type == .CONNECT
+        switch network_poll(&network)
         {
-            connected = true
-            connecting = false
-            monitor_append_line(&monitor, "Successfully connected.")
+            case .NO_EVENT:
+
+            case .EVENT:
+                switch network.event.type
+                {
+                    case .NONE:
+
+                    case .CONNECT:
+                        network.status = .CONNECTED
+                        monitor_append_line(
+                            &monitor,
+                            "Successfully connected.",
+                            COLOR_MSG_SUCCESS
+                        )
+                    case .DISCONNECT:
+                        network.status = .STALLED
+                        monitor_append_line(
+                            &monitor,
+                            "Disconnected from the server.",
+                            COLOR_TEXT
+                        )
+                    case .RECEIVE:
+                        enet.packet_destroy(network.event.packet)
+                }
+            case .FAILURE:
+                monitor_append_line(
+                    &monitor,
+                    "An error ocurred while trying to poll events.",
+                    COLOR_MSG_ERR
+                )
         }
 
-        if connecting && !connected && network_time >= 5.0
+        if network.status == .CONNECTING && network.connection_time >= 5.0
         {
-            enet.peer_reset(peer)
-            connecting = false
-            monitor_append_line(&monitor, "Connection failed.")
+            enet.peer_reset(network.peer)
+            network.status = .STALLED
+            monitor_append_line(
+                &monitor,
+                "Connection failed.",
+                COLOR_MSG_ERR
+            )
         }
 
-        line_input_handle_input(&line_input, serif_font, &sound_engine)
+        if IsKeyPressed(KeyboardKey.ENTER)
+        {
+            handle_command(
+                line_input_to_cstring(&line_input), &monitor, &network
+            )
+        }
+        else
+        {
+            line_input_handle_input(
+                &line_input, serif_font, &monitor, &sound_engine
+            )
+        }
 
         BeginDrawing()
         defer EndDrawing()

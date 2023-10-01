@@ -18,26 +18,25 @@ SoundMap :: map[cstring]SoundBank
 
 SoundBank :: struct
 {
-    sounds: ^[MAXIMUM_SOUND_POLYPHONY]miniaudio.sound,
+    sounds: []miniaudio.sound,
     next: int,
 }
 
 sound_bank_make :: proc() -> (SoundBank, bool)
 {
-    ptr, alloc_err := mem.alloc(
-        size_of(miniaudio.sound) * MAXIMUM_SOUND_POLYPHONY
-    )
+    sounds, alloc_err := make([]miniaudio.sound, MAXIMUM_SOUND_POLYPHONY)
 
-    if alloc_err != .None do return {}, false
+    if alloc_err != .None
+    {
+        return {}, false
+    }
 
-    sound_arr := (^[MAXIMUM_SOUND_POLYPHONY]miniaudio.sound)(ptr)
-
-    return SoundBank{sound_arr, 0}, true
+    return SoundBank{sounds, 0}, true
 }
 
 sound_bank_destroy :: proc(sb: ^SoundBank)
 {
-    free(sb.sounds)
+    delete(sb.sounds)
     sb.next = -1
 }
 

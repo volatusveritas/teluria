@@ -46,7 +46,7 @@ main :: proc()
         switch event.type
         {
             case .NONE:
-                fmt.println("Event received: NONE")
+
             case .CONNECT:
                 fmt.println("Event received: CONNECT")
             case .DISCONNECT:
