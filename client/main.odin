@@ -185,10 +185,10 @@ builtin_command_connect :: proc(
 
     if !ok
     {
-        monitor_append_line(monitor, "Command syntax error.", COLOR_MSG_ERR)
         monitor_append_line(
             monitor,
-            "Port must be a number between 0 and 65535.",
+            "Command syntax error: port must be a number between 0 and 65535.",
+            COLOR_MSG_ERR,
         )
         monitor_append_line(monitor, USAGE_MSG)
         return
@@ -210,7 +210,7 @@ handle_command :: proc(
     switch command_get_next(&command)
     {
         case "say":
-
+            // TODO: implement the "say" built-in
         case "connect":
             builtin_command_connect(&command, monitor, network)
         case:
