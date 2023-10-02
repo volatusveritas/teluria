@@ -194,6 +194,12 @@ builtin_command_connect :: proc(
         return
     }
 
+    if network.status != .STALLED
+    {
+        monitor_append_line(monitor, "Cancelling ongoing connection...")
+        enet.peer_reset(network.peer)
+    }
+
     monitor_append_line(monitor, "Connecting...")
     cmd_connect(strings.clone_to_cstring(host), port, monitor, network)
 }
