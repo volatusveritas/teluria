@@ -119,9 +119,14 @@ monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
     }
 }
 
-cmd_connect :: proc(monitor: ^Monitor, network: ^Network)
+cmd_connect :: proc(
+    host: cstring,
+    port: u16,
+    monitor: ^Monitor,
+    network: ^Network,
+)
 {
-    peer, err := net_client_connect(network.client, "127.0.0.1", 25565)
+    peer, err := net_client_connect(network.client, host, port)
 
     network.peer = peer
 
@@ -129,7 +134,6 @@ cmd_connect :: proc(monitor: ^Monitor, network: ^Network)
     {
         case .SUCCESS:
             network.status = .CONNECTING
-
         case .RESOLVE_HOST:
             monitor_append_line(
                 monitor,
@@ -145,18 +149,70 @@ cmd_connect :: proc(monitor: ^Monitor, network: ^Network)
     }
 }
 
-handle_command :: proc(cmd: cstring, monitor: ^Monitor, network: ^Network)
+builtin_command_connect :: proc(
+    cmd: ^Command,
+    monitor: ^Monitor,
+    network: ^Network,
+)
 {
-    sections, err := strings.split(string(cmd), " ")
+    USAGE_MSG :: "Usage: connect {host} {port}"
 
-    if err != nil do return
+    if !command_has_next(cmd)
+    {
+        monitor_append_line(
+            monitor,
+            "Command syntax error: missing arguments {host}, {port}.",
+            COLOR_MSG_ERR,
+        )
+        monitor_append_line(monitor, USAGE_MSG)
+        return
+    }
 
-    switch sections[0]
+    host := command_get_string(cmd)
+
+    if !command_has_next(cmd)
+    {
+        monitor_append_line(
+            monitor,
+            "Command syntax error: missing argument {port}.",
+            COLOR_MSG_ERR,
+        )
+        monitor_append_line(monitor, USAGE_MSG)
+        return
+    }
+
+    port, ok := command_get_u16(cmd)
+
+    if !ok
+    {
+        monitor_append_line(monitor, "Command syntax error.", COLOR_MSG_ERR)
+        monitor_append_line(
+            monitor,
+            "Port must be a number between 0 and 65535.",
+        )
+        monitor_append_line(monitor, USAGE_MSG)
+        return
+    }
+
+    monitor_append_line(monitor, "Connecting...")
+    cmd_connect(strings.clone_to_cstring(host), port, monitor, network)
+}
+
+handle_command :: proc(
+    line_input: ^LineInput,
+    monitor: ^Monitor,
+    network: ^Network,
+)
+{
+    strings.pop_rune(&line_input.text)
+    command := command_make(strings.to_string(line_input.text))
+
+    switch command_get_next(&command)
     {
         case "say":
+
         case "connect":
-            monitor_append_line(monitor, "Connecting...")
-            cmd_connect(monitor, network)
+            builtin_command_connect(&command, monitor, network)
         case:
             // Look into the Lua custom commands
     }
@@ -496,10 +552,7 @@ main :: proc()
 
         if IsKeyPressed(KeyboardKey.ENTER)
         {
-            handle_command(
-                line_input_to_cstring(&line_input), &monitor, &network,
-            )
-
+            handle_command(&line_input, &monitor, &network)
             line_input_reset(&line_input)
         }
         else
