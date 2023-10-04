@@ -1,11 +1,10 @@
 package client
 
-import "core:strings"
 import "core:fmt"
+import "core:strings"
 
-import enet "vendor:ENet"
 import "vendor:raylib"
-// import lua "vendor:lua/5.4"
+import enet "vendor:ENet"
 
 SCREEN_WIDTH  : i32 : 1138
 SCREEN_HEIGHT : i32 : 640
