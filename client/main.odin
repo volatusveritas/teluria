@@ -214,8 +214,6 @@ handle_command :: proc(
 
     switch command_get_next(&command)
     {
-        case "say":
-            // TODO: implement the "say" built-in
         case "connect":
             builtin_command_connect(&command, monitor, network)
         case:
