@@ -6,6 +6,8 @@ import "core:strings"
 import "vendor:raylib"
 import enet "vendor:ENet"
 
+import "../shared"
+
 SCREEN_WIDTH  : i32 : 1138
 SCREEN_HEIGHT : i32 : 640
 SCREEN_TITLE  : cstring : "Teluria Window"
@@ -149,14 +151,14 @@ cmd_connect :: proc(
 }
 
 builtin_command_connect :: proc(
-    cmd: ^Command,
+    cmd: ^shared.Command,
     monitor: ^Monitor,
     network: ^Network,
 )
 {
     USAGE_MSG :: "Usage: connect {host} {port}"
 
-    if !command_has_next(cmd)
+    if !shared.command_has_next(cmd)
     {
         monitor_append_line(
             monitor,
@@ -167,9 +169,9 @@ builtin_command_connect :: proc(
         return
     }
 
-    host := command_get_string(cmd)
+    host := shared.command_get_string(cmd)
 
-    if !command_has_next(cmd)
+    if !shared.command_has_next(cmd)
     {
         monitor_append_line(
             monitor,
@@ -180,7 +182,7 @@ builtin_command_connect :: proc(
         return
     }
 
-    port, ok := command_get_u16(cmd)
+    port, ok := shared.command_get_u16(cmd)
 
     if !ok
     {
@@ -210,9 +212,9 @@ handle_command :: proc(
 )
 {
     strings.pop_rune(&line_input.text)
-    command := command_make(strings.to_string(line_input.text))
+    command := shared.command_make(strings.to_string(line_input.text))
 
-    switch command_get_next(&command)
+    switch shared.command_get_next(&command)
     {
         case "connect":
             builtin_command_connect(&command, monitor, network)
