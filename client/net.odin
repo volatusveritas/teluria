@@ -2,6 +2,7 @@ package client
 
 import enet "vendor:ENet"
 
+NETWORK_SERVER_CHANNEL : u8 : 0
 CONNECTION_PEERS : uint : 1
 CONNECTION_CHANNELS : uint : 2
 CONNECTION_BANDWIDTH_IN : u32 = 0
@@ -81,7 +82,7 @@ net_client_make :: proc() -> ^enet.Host
     )
 }
 
-net_client_destroy :: proc(c: ^enet.Host)
+net_client_destroy :: proc(n: ^Network, c: ^enet.Host)
 {
     enet.host_destroy(c)
 }

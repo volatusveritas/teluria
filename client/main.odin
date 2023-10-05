@@ -217,7 +217,15 @@ handle_command :: proc(
         case "connect":
             builtin_command_connect(&command, monitor, network)
         case:
-            // Look into the Lua custom commands
+            strings.write_rune(&line_input.text, 0)
+
+            packet := enet.packet_create(
+                rawptr(raw_data(strings.to_string(line_input.text))),
+                uint(strings.builder_len(line_input.text)),
+                .RELIABLE,
+            )
+
+            enet.peer_send(network.peer, NETWORK_SERVER_CHANNEL, packet)
     }
 }
 
@@ -497,7 +505,11 @@ main :: proc()
         return
     }
 
-    defer net_client_destroy(network.client)
+    defer net_client_destroy(&network, network.client)
+
+    defer if network.status != .STALLED
+    {
+    }
 
     for !WindowShouldClose()
     {
@@ -528,9 +540,17 @@ main :: proc()
                         monitor_append_line(
                             &monitor,
                             "Disconnected from the server.",
-                            COLOR_TEXT,
                         )
                     case .RECEIVE:
+                        pk_text := strings.string_from_ptr(
+                            network.event.packet.data,
+                            int(network.event.packet.dataLength),
+                        )
+
+                        new_line := strings.clone_to_cstring(pk_text)
+
+                        monitor_append_line(&monitor, new_line)
+
                         enet.packet_destroy(network.event.packet)
                 }
             case .FAILURE:

@@ -1,6 +1,7 @@
 package server
 
 import "core:fmt"
+import "core:strings"
 
 import enet "vendor:ENet"
 
@@ -53,6 +54,29 @@ main :: proc()
                 fmt.println("Event received: DISCONNECT")
             case .RECEIVE:
                 fmt.println("Event received: RECEIVE")
+
+                pk_text := strings.string_from_ptr(
+                    event.packet.data,
+                    int(event.packet.dataLength),
+                )
+
+                fmt.printf(
+                    "Packet of size %v received, contents:\n%v\n",
+                    len(pk_text),
+                    pk_text,
+                )
+
+                response: cstring = "THE SERVER SAYS THIS"
+
+                pkt := enet.packet_create(
+                    rawptr(response),
+                    uint(len(response)),
+                    .RELIABLE,
+                )
+
+                enet.peer_send(event.peer, 0, pkt)
+
+                enet.packet_destroy(event.packet)
         }
     }
 
