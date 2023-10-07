@@ -205,7 +205,7 @@ builtin_command_connect :: proc(
     cmd_connect(strings.clone_to_cstring(host), port, monitor, network)
 }
 
-builtin_command_exit :: proc(
+builtin_command_disconnect :: proc(
     command: ^shared.Command,
     monitor: ^Monitor,
     network: ^Network,
@@ -228,8 +228,8 @@ handle_command :: proc(
     {
         case "connect":
             builtin_command_connect(&command, monitor, network)
-        case "exit":
-            builtin_command_exit(&command, monitor, network)
+        case "disconnect":
+            builtin_command_disconnect(&command, monitor, network)
         case:
             strings.write_rune(&line_input.text, 0)
 
