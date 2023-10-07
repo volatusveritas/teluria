@@ -197,8 +197,8 @@ builtin_command_connect :: proc(
 
     if network.status != .STALLED
     {
-        monitor_append_line(monitor, "Cancelling ongoing connection...")
-        enet.peer_reset(network.peer)
+        monitor_append_line(monitor, "A connection is already established.")
+        return
     }
 
     monitor_append_line(monitor, "Connecting...")
@@ -211,6 +211,11 @@ builtin_command_disconnect :: proc(
     network: ^Network,
 )
 {
+    if network.status != .CONNECTED {
+        monitor_append_line(monitor, "You are not connected.")
+        return
+    }
+
     enet.peer_disconnect(network.peer, 0)
     monitor_append_line(monitor, "Disconnecting...")
 }
