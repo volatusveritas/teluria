@@ -205,6 +205,16 @@ builtin_command_connect :: proc(
     cmd_connect(strings.clone_to_cstring(host), port, monitor, network)
 }
 
+builtin_command_exit :: proc(
+    command: ^shared.Command,
+    monitor: ^Monitor,
+    network: ^Network,
+)
+{
+    enet.peer_disconnect(network.peer, 0)
+    monitor_append_line(monitor, "Disconnecting...")
+}
+
 handle_command :: proc(
     line_input: ^LineInput,
     monitor: ^Monitor,
@@ -218,6 +228,8 @@ handle_command :: proc(
     {
         case "connect":
             builtin_command_connect(&command, monitor, network)
+        case "exit":
+            builtin_command_exit(&command, monitor, network)
         case:
             strings.write_rune(&line_input.text, 0)
 
