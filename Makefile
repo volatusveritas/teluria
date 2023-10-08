@@ -1,9 +1,19 @@
 .PHONY: build-client build-server build \
 	debug-client debug-server debug \
 	check-client check-server check \
+	release-client release-server release \
 	run-client run-server
 
 GOPTIONS = -vet-unused -vet-shadowing -vet-style -vet-semicolon
+ROPTIONS = -o:speed
+
+release-client:
+	odin build client -out:build/client_release.exe $(GOPTIONS) $(ROPTIONS)
+
+release-server:
+	odin build server -out:build/server_release.exe $(GOPTIONS) $(ROPTIONS)
+
+release: release-client release-server
 
 build-client:
 	odin build client -out:build/client.exe $(GOPTIONS)
