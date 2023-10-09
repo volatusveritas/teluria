@@ -1,7 +1,7 @@
-.PHONY: build-client build-server build \
-	debug-client debug-server debug \
-	check-client check-server check \
-	release-client release-server release \
+.PHONY: build-client build-server build-all \
+	debug-client debug-server debug-all \
+	check-client check-server check-all \
+	release-client release-server release-all \
 	run-client run-server
 
 GOPTIONS = -vet-unused -vet-shadowing -vet-style -vet-semicolon
@@ -13,7 +13,7 @@ release-client:
 release-server:
 	odin build server -out:build/server_release.exe $(GOPTIONS) $(ROPTIONS)
 
-release: release-client release-server
+release-all: release-client release-server
 
 build-client:
 	odin build client -out:build/client.exe $(GOPTIONS)
@@ -21,7 +21,7 @@ build-client:
 build-server:
 	odin build server -out:build/server.exe $(GOPTIONS)
 
-build: build-client build-server
+build-all: build-client build-server
 
 debug-client:
 	odin build client -out:build/client_debug.exe -debug $(GOPTIONS)
@@ -29,7 +29,7 @@ debug-client:
 debug-server:
 	odin build server -out:build/server_debug.exe -debug $(GOPTIONS)
 
-debug: debug-client debug-server
+debug-all: debug-client debug-server
 
 check-client:
 	odin check client $(GOPTIONS)
@@ -37,7 +37,7 @@ check-client:
 check-server:
 	odin check server $(GOPTIONS)
 
-check: check-client check-server
+check-all: check-client check-server
 
 run-client:
 	odin run client -out:build/client.exe $(GOPTIONS)
