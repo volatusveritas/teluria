@@ -39,6 +39,23 @@ main :: proc()
 
     fmt.println("Server successfully initialized.")
 
+    fmt.println("Initializing the Lua engine...")
+    lua_state := lua_engine_initialize()
+    defer lua_engine_deinitialize(lua_state)
+    fmt.println("Lua engine initialized.")
+
+    fmt.println("Setting up the Lua registry...")
+    lua_engine_setup_registry(lua_state, host)
+    fmt.println("Lua registry ready.")
+
+    fmt.println("Loading the Teluria API...")
+    lua_engine_expose_builtin_api(lua_state)
+    fmt.println("Teluria API loaded.")
+
+    // fmt.println("Loading the server's Lua scripts...")
+    // lua_engine_load_server(lua_state)
+    // fmt.println("Server's Lua scripts loaded.")
+
     event := enet.Event{}
 
     fmt.println("Polling events...")
@@ -70,7 +87,7 @@ main :: proc()
 
                 pkt := enet.packet_create(
                     rawptr(response),
-                    uint(len(response)),
+                    len(response),
                     .RELIABLE,
                 )
 
