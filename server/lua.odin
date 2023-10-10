@@ -91,12 +91,16 @@ teluria_callback_on_connect :: proc(state: ^lua.State)
     // Check if there is a function there
     if lua.type(state, on_connect_index) == .FUNCTION
     {
-        // Call teluria.on_connect
+        // Call teluria.on_connect (pops the function)
         lua.call(state, 0, 0)
+        // Pop the teluria global from the stack
+        lua.pop(state, 1)
     }
-
-    // Pop the teluria global from the stack
-    lua.pop(state, 1)
+    else
+    {
+        // Pop the nil value and the teluria global
+        lua.pop(state, 2)
+    }
 }
 
 lua_engine_expose_builtin_api :: proc(state: ^lua.State)
