@@ -39,6 +39,8 @@ main :: proc()
 
     fmt.println("Server successfully initialized.")
 
+    event := enet.Event{}
+
     fmt.println("Initializing the Lua engine...")
     lua_state := lua_engine_initialize()
     defer lua_engine_deinitialize(lua_state)
@@ -52,11 +54,9 @@ main :: proc()
     lua_engine_expose_builtin_api(lua_state)
     fmt.println("Teluria API loaded.")
 
-    // fmt.println("Loading the server's Lua scripts...")
-    // lua_engine_load_server(lua_state)
-    // fmt.println("Server's Lua scripts loaded.")
-
-    event := enet.Event{}
+    fmt.println("Loading the server's Lua scripts...")
+    lua_engine_load_server(lua_state)
+    fmt.println("Server's Lua scripts loaded.")
 
     fmt.println("Polling events...")
     for enet.host_service(host, &event, 200) >= 0
@@ -67,6 +67,7 @@ main :: proc()
 
             case .CONNECT:
                 fmt.println("Event received: CONNECT")
+                teluria_callback_on_connect(lua_state)
             case .DISCONNECT:
                 fmt.println("Event received: DISCONNECT")
             case .RECEIVE:

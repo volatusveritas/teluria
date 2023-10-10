@@ -50,11 +50,20 @@ teluria_core_get_host :: proc "c" (state: ^lua.State) -> ^enet.Host
 }
 
 @(private="file")
+teluria_core_get_event :: proc "c" (state: ^lua.State) -> ^enet.Event
+{
+    lua.getfield(state, lua.REGISTRYINDEX, "event")
+    event := (^enet.Event)(uintptr(lua.tointeger(state, lua.gettop(state))))
+    lua.pop(state, 1)
+
+    return event
+}
+
+@(private="file")
 teluria_builtin_broadcast :: proc "c" (state: ^lua.State) -> i32
 {
     host := teluria_core_get_host(state)
-
-    message: cstring = "This message was broadcasted."
+    message := lua.L_checkstring(state, 1)
     packet := enet.packet_create(rawptr(message), len(message), .RELIABLE)
 
     enet.host_broadcast(host, 0, packet)
@@ -68,23 +77,33 @@ teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
     return 0
 }
 
-@(private="file")
-teluria_builtin_on_connect :: proc "c" (state: ^lua.State) -> i32
+teluria_callback_on_connect :: proc(state: ^lua.State)
 {
-    return 0
+    // Push the teluria global to the stack
+    lua.getglobal(state, "teluria")
+    // Get teluria's index
+    teluria_index := lua.gettop(state)
+    // Push teluria.on_connect to the stack
+    lua.getfield(state, teluria_index, "on_connect")
+    // Get teluria.on_connect's index
+    on_connect_index := lua.gettop(state)
+
+    // Check if there is a function there
+    if lua.type(state, on_connect_index) == .FUNCTION
+    {
+        // Call teluria.on_connect
+        lua.call(state, 0, 0)
+    }
+
+    // Pop the teluria global from the stack
+    lua.pop(state, 1)
 }
 
 lua_engine_expose_builtin_api :: proc(state: ^lua.State)
 {
-    // lua_CFunction :: proc(^lua.State) -> int
-    // lua_setfield(state, idx_of_t, k)  ->  t[k] = top_of_stack
-    // lua_setglobal(state, name)  ->  pop top and set to name as global
-    // lua_gettop(state)  ->  index of top
-
     teluria_libfuncs := []lua.L_Reg {
         { "broadcast", teluria_builtin_broadcast },
         { "send", teluria_builtin_send },
-        { "on_connect", teluria_builtin_on_connect },
         { nil, nil },
     }
 
