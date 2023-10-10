@@ -70,6 +70,7 @@ main :: proc()
                 teluria_callback_on_connect(lua_state, event.peer.connectID)
             case .DISCONNECT:
                 fmt.println("Event received: DISCONNECT")
+                teluria_callback_on_disconnect(lua_state, event.peer.connectID)
             case .RECEIVE:
                 fmt.println("Event received: RECEIVE")
 

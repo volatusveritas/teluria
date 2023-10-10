@@ -76,7 +76,6 @@ teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
 {
     peer_id := u32(lua.L_checkinteger(state, 1))
     message := lua.L_checkstring(state, 2)
-
     host := teluria_core_get_host(state)
 
     for i: uint = 0; i < host.peerCount; i += 1
@@ -101,30 +100,39 @@ teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
 
 teluria_callback_on_connect :: proc(state: ^lua.State, peer_id: u32)
 {
-    // Push the teluria global to the stack
     lua.getglobal(state, "teluria")
-    // Get teluria's index
     teluria_index := lua.gettop(state)
-    // Push teluria.on_connect to the stack
     lua.getfield(state, teluria_index, "on_connect")
-    // Get teluria.on_connect's index
     on_connect_index := lua.gettop(state)
 
-    // Check if there is a function there
     if lua.type(state, on_connect_index) == .FUNCTION
     {
-        // Push the peer ID to the stack
         lua.pushinteger(state, lua.Integer(peer_id))
-        // Call teluria.on_connect (pops the function)
         lua.call(state, 1, 0)
-        // Pop the teluria global from the stack
         lua.pop(state, 1)
     }
     else
     {
-        // Pop the nil value and the teluria global
         lua.pop(state, 2)
     }
+}
+
+teluria_callback_on_disconnect :: proc(state: ^lua.State, peer_id: u32)
+{
+    lua.getglobal(state, "teluria")
+    teluria_index := lua.gettop(state)
+    lua.getfield(state, teluria_index, "on_disconnect")
+    on_disconnect_index := lua.gettop(state)
+
+    if lua.type(state, on_disconnect_index) != .FUNCTION
+    {
+        lua.pop(state, 2)
+        return
+    }
+
+    lua.pushinteger(state, lua.Integer(peer_id))
+    lua.call(state, 1, 0)
+    lua.pop(state, 1)
 }
 
 lua_engine_expose_builtin_api :: proc(state: ^lua.State)
