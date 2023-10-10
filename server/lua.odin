@@ -74,10 +74,32 @@ teluria_builtin_broadcast :: proc "c" (state: ^lua.State) -> i32
 @(private="file")
 teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
 {
+    peer_id := u32(lua.L_checkinteger(state, 1))
+    message := lua.L_checkstring(state, 2)
+
+    host := teluria_core_get_host(state)
+
+    for i: uint = 0; i < host.peerCount; i += 1
+    {
+        if host.peers[i].connectID == peer_id
+        {
+            packet := enet.packet_create(
+                rawptr(message),
+                len(message),
+                .RELIABLE,
+            )
+
+            // TODO: handle errors here
+            enet.peer_send(&host.peers[i], 0, packet)
+
+            break
+        }
+    }
+
     return 0
 }
 
-teluria_callback_on_connect :: proc(state: ^lua.State)
+teluria_callback_on_connect :: proc(state: ^lua.State, peer_id: u32)
 {
     // Push the teluria global to the stack
     lua.getglobal(state, "teluria")
@@ -91,8 +113,10 @@ teluria_callback_on_connect :: proc(state: ^lua.State)
     // Check if there is a function there
     if lua.type(state, on_connect_index) == .FUNCTION
     {
+        // Push the peer ID to the stack
+        lua.pushinteger(state, lua.Integer(peer_id))
         // Call teluria.on_connect (pops the function)
-        lua.call(state, 0, 0)
+        lua.call(state, 1, 0)
         // Pop the teluria global from the stack
         lua.pop(state, 1)
     }
