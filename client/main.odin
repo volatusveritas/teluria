@@ -252,14 +252,12 @@ LineInput :: struct
 {
     text: strings.Builder,
     offset: i32,
+    silent: bool,
 }
 
 line_input_make :: proc() -> LineInput
 {
-    line_input := LineInput {
-        strings.builder_make(),
-        0,
-    }
+    line_input := LineInput { strings.builder_make(), 0, false }
 
     strings.write_rune(&line_input.text, 0)
 
@@ -416,23 +414,34 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
         COLOR_TEXTBOX,
     )
 
-    DrawTextEx(
-        font,
-        line_input_to_cstring(li),
-        {
-            f32(LINE_INPUT_X + TEXT_PADDING),
-            f32(LINE_INPUT_Y + TEXT_PADDING),
-        },
-        f32(FONT_SIZE),
-        FONT_SPACING,
-        COLOR_TEXT,
-    )
+    if !li.silent
+    {
+        DrawTextEx(
+            font,
+            line_input_to_cstring(li),
+            {
+                f32(LINE_INPUT_X + TEXT_PADDING),
+                f32(LINE_INPUT_Y + TEXT_PADDING),
+            },
+            f32(FONT_SIZE),
+            FONT_SPACING,
+            COLOR_TEXT,
+        )
 
-    cursor_offset += (
-        (line_input_get_text_width(li, font) - cursor_offset)
-        * GetFrameTime()
-        * CURSOR_SPEED
-    )
+        cursor_offset += (
+            (line_input_get_text_width(li, font) - cursor_offset)
+            * GetFrameTime()
+            * CURSOR_SPEED
+        )
+    }
+    else
+    {
+        cursor_offset += (
+            (0 - cursor_offset)
+            * GetFrameTime()
+            * CURSOR_SPEED
+        )
+    }
 
     DrawLineEx(
         {
@@ -515,7 +524,6 @@ main :: proc()
     defer net_destroy()
 
     network: Network
-
     network.client = net_client_make()
 
     if network.client == nil
@@ -526,8 +534,11 @@ main :: proc()
 
     defer net_client_destroy(&network, network.client)
 
+    line_input.silent = true
+
     defer if network.status != .STALLED
     {
+        // ???
     }
 
     for !WindowShouldClose()
