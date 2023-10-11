@@ -135,6 +135,27 @@ teluria_callback_on_disconnect :: proc(state: ^lua.State, peer_id: u32)
     lua.pop(state, 1)
 }
 
+teluria_call_custom_command :: proc(state: ^lua.State, name: cstring)
+{
+    lua.getglobal(state, "teluria")
+    teluria_index := lua.gettop(state)
+    lua.getfield(state, teluria_index, "commands")
+    commands_index := lua.gettop(state)
+    lua.getfield(state, commands_index, name)
+    command_index := lua.gettop(state)
+
+    if lua.type(state, command_index) != .FUNCTION
+    {
+        lua.pop(state, 3)
+        return
+    }
+    
+    // TODO: push function arguments
+
+    lua.call(state, 0, 0)
+    lua.pop(state, 2)
+}
+
 lua_engine_expose_builtin_api :: proc(state: ^lua.State)
 {
     teluria_libfuncs := []lua.L_Reg {
@@ -145,4 +166,10 @@ lua_engine_expose_builtin_api :: proc(state: ^lua.State)
 
     lua.L_newlib(state, teluria_libfuncs)
     lua.setglobal(state, "teluria")
+
+    lua.getglobal(state, "teluria")
+    teluria_global_index := lua.gettop(state)
+    lua.newtable(state)
+    lua.setfield(state, teluria_global_index, "commands")
+    lua.pop(state, 1)
 }

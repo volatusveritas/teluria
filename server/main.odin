@@ -85,7 +85,7 @@ main :: proc()
                     pk_text,
                 )
 
-                response: cstring = "THE SERVER SAYS THIS"
+                response: cstring = "The server received the packet."
 
                 pkt := enet.packet_create(
                     rawptr(response),
@@ -96,6 +96,11 @@ main :: proc()
                 enet.peer_send(event.peer, 0, pkt)
 
                 enet.packet_destroy(event.packet)
+
+                teluria_call_custom_command(
+                    lua_state,
+                    cstring(event.packet.data),
+                )
         }
     }
 
