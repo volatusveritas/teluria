@@ -2,6 +2,8 @@ package client
 
 import "core:fmt"
 import "core:strings"
+import "core:mem"
+import "core:strconv"
 
 import "vendor:raylib"
 import enet "vendor:ENet"
@@ -127,6 +129,8 @@ cmd_connect :: proc(
     network: ^Network,
 )
 {
+    monitor_append_line(monitor, "Connecting...")
+
     peer, err := net_client_connect(network.client, host, port)
 
     network.peer = peer
@@ -150,59 +154,139 @@ cmd_connect :: proc(
     }
 }
 
+ConnectPromptData :: struct
+{
+    host: string,
+    port: u16,
+    username: string,
+    password: string,
+}
+
 builtin_command_connect :: proc(
     cmd: ^shared.Command,
+    line_input: ^LineInput,
     monitor: ^Monitor,
     network: ^Network,
 )
 {
-    USAGE_MSG :: "Usage: connect {host} {port}"
+    // TODO: handle the error here
+    prompt_data_ptr, _ := mem.alloc(size_of(ConnectPromptData))
 
-    if !shared.command_has_next(cmd)
-    {
-        monitor_append_line(
-            monitor,
-            "Command syntax error: missing arguments {host}, {port}.",
-            COLOR_MSG_ERR,
-        )
-        monitor_append_line(monitor, USAGE_MSG)
-        return
-    }
+    line_input.active_prompt = prompt_make(
+        prompt_data_ptr,
+        proc(data: rawptr, monitor: ^Monitor, network: ^Network)
+        {
+            prompt_data := (^ConnectPromptData)(data)
 
-    host := shared.command_get_string(cmd)
+            cmd_connect(
+                strings.clone_to_cstring(prompt_data.host),
+                prompt_data.port,
+                monitor,
+                network,
+            )
+        },
+    )
 
-    if !shared.command_has_next(cmd)
-    {
-        monitor_append_line(
-            monitor,
-            "Command syntax error: missing argument {port}.",
-            COLOR_MSG_ERR,
-        )
-        monitor_append_line(monitor, USAGE_MSG)
-        return
-    }
+    prompt_add_step(
+        line_input.active_prompt,
+        "[Connect] Please type the server's address.",
+        proc(
+            data: rawptr,
+            input: string,
+            monitor: ^Monitor,
+            line_input: ^LineInput,
+            network: ^Network,
+        ) -> bool
+        {
+            prompt_data := (^ConnectPromptData)(data)
+            prompt_data.host = input
+            return true
+        },
+    )
 
-    port, ok := shared.command_get_u16(cmd)
+    prompt_add_step(
+        line_input.active_prompt,
+        "[Connect] Please type the server's port.",
+        proc(
+            data: rawptr,
+            input: string,
+            monitor: ^Monitor,
+            line_input: ^LineInput,
+            network: ^Network,
+        ) -> bool
+        {
+            port, ok := strconv.parse_uint(input)
 
-    if !ok
-    {
-        monitor_append_line(
-            monitor,
-            "Command syntax error: port must be a number between 0 and 65535.",
-            COLOR_MSG_ERR,
-        )
-        monitor_append_line(monitor, USAGE_MSG)
-        return
-    }
+            if !ok || port > uint(max(u16))
+            {
+                return false
+            }
 
-    if network.status != .STALLED
-    {
-        monitor_append_line(monitor, "A connection is already established.")
-        return
-    }
+            prompt_data := (^ConnectPromptData)(data)
+            prompt_data.port = u16(port)
 
-    monitor_append_line(monitor, "Connecting...")
-    cmd_connect(strings.clone_to_cstring(host), port, monitor, network)
+            monitor_append_line(
+                monitor,
+                fmt.caprintf(
+                    "[Connect] You have provided the address '%v:%v'.",
+                    prompt_data.host,
+                    prompt_data.port,
+                ),
+                raylib.GRAY,
+            )
+
+            return true
+        },
+    )
+
+    prompt_add_step(
+        line_input.active_prompt,
+        "[Connect] Please type your username.",
+        proc(
+            data: rawptr,
+            input: string,
+            monitor: ^Monitor,
+            line_input: ^LineInput,
+            network: ^Network,
+        ) -> bool
+        {
+            prompt_data := (^ConnectPromptData)(data)
+            prompt_data.username = input
+
+            monitor_append_line(
+                monitor,
+                fmt.caprintf(
+                    "[Connect] You have provided the username '%v'.",
+                    prompt_data.username,
+                ),
+                raylib.GRAY,
+            )
+
+            line_input.silent = true
+            return true
+        },
+    )
+
+    prompt_add_step(
+        line_input.active_prompt,
+        "[Connect] Please type your password.",
+        proc(
+            data: rawptr,
+            input: string,
+            monitor: ^Monitor,
+            line_input: ^LineInput,
+            network: ^Network,
+        ) -> bool
+        {
+            prompt_data := (^ConnectPromptData)(data)
+            prompt_data.password = input
+
+            line_input.silent = false
+            return true
+        },
+    )
+
+    prompt_process_start(line_input.active_prompt, monitor)
 }
 
 builtin_command_disconnect :: proc(
@@ -232,10 +316,16 @@ handle_command :: proc(
     switch shared.command_get_next(&command)
     {
         case "connect":
-            builtin_command_connect(&command, monitor, network)
+            builtin_command_connect(&command, line_input, monitor, network)
         case "disconnect":
             builtin_command_disconnect(&command, monitor, network)
         case:
+            if network.status != .CONNECTED
+            {
+                monitor_append_line(monitor, "No such built-in command.")
+                return
+            }
+
             strings.write_rune(&line_input.text, 0)
 
             packet := enet.packet_create(
@@ -253,11 +343,17 @@ LineInput :: struct
     text: strings.Builder,
     offset: i32,
     silent: bool,
+    active_prompt: ^Prompt,
 }
 
 line_input_make :: proc() -> LineInput
 {
-    line_input := LineInput { strings.builder_make(), 0, false }
+    line_input := LineInput {
+        text = strings.builder_make(),
+        offset = 0,
+        silent = false,
+        active_prompt = nil,
+    }
 
     strings.write_rune(&line_input.text, 0)
 
@@ -271,8 +367,8 @@ line_input_destroy :: proc(li: ^LineInput)
 
 line_input_reset :: proc(li: ^LineInput)
 {
-    line_input_destroy(li)
-    li^ = line_input_make()
+    strings.builder_reset(&li.text)
+    strings.write_rune(&li.text, 0)
 }
 
 line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
@@ -534,12 +630,7 @@ main :: proc()
 
     defer net_client_destroy(&network, network.client)
 
-    line_input.silent = true
-
-    defer if network.status != .STALLED
-    {
-        // ???
-    }
+    // line_input.silent = true
 
     for !WindowShouldClose()
     {
@@ -605,7 +696,27 @@ main :: proc()
 
         if IsKeyPressed(KeyboardKey.ENTER)
         {
-            handle_command(&line_input, &monitor, &network)
+            if line_input.active_prompt != nil
+            {
+                strings.pop_rune(&line_input.text)
+
+                if !prompt_process_step(
+                    line_input.active_prompt,
+                    strings.clone(strings.to_string(line_input.text)),
+                    &monitor,
+                    &line_input,
+                    &network,
+                )
+                {
+                    prompt_destroy(line_input.active_prompt)
+                    line_input.active_prompt = nil
+                }
+            }
+            else
+            {
+                handle_command(&line_input, &monitor, &network)
+            }
+
             line_input_reset(&line_input)
         }
         else
