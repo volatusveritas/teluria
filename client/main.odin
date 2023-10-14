@@ -2,7 +2,6 @@ package client
 
 import "core:fmt"
 import "core:strings"
-import "core:mem"
 import "core:strconv"
 
 import "vendor:raylib"
@@ -170,7 +169,7 @@ builtin_command_connect :: proc(
 )
 {
     // TODO: handle the error here
-    prompt_data_ptr, _ := mem.alloc(size_of(ConnectPromptData))
+    prompt_data_ptr, _ := new(ConnectPromptData)
 
     line_input.active_prompt = prompt_make(
         prompt_data_ptr,
@@ -365,10 +364,19 @@ line_input_destroy :: proc(li: ^LineInput)
     strings.builder_destroy(&li.text)
 }
 
-line_input_reset :: proc(li: ^LineInput)
+line_input_reset :: proc(line_input: ^LineInput)
 {
-    strings.builder_reset(&li.text)
-    strings.write_rune(&li.text, 0)
+    strings.builder_reset(&line_input.text)
+    strings.write_rune(&line_input.text, 0)
+}
+
+line_input_remake :: proc(line_input: ^LineInput)
+{
+    line_input_reset(line_input)
+    prompt_destroy(line_input.active_prompt)
+    line_input.active_prompt = nil
+
+    line_input.silent = false
 }
 
 line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
@@ -381,19 +389,22 @@ line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
     ).x
 }
 
-line_input_handle_control :: proc(li: ^LineInput)
+line_input_handle_control :: proc(line_input: ^LineInput, monitor: ^Monitor)
 {
     using raylib
 
     #partial switch GetKeyPressed()
     {
         case KeyboardKey.U:
-            line_input_reset(li)
+            line_input_reset(line_input)
+        case KeyboardKey.C:
+            monitor_append_line(monitor, "Input cancelled by the user.")
+            line_input_remake(line_input)
     }
 }
 
 line_input_handle_input :: proc(
-    li: ^LineInput,
+    line_input: ^LineInput,
     font: raylib.Font,
     monitor: ^Monitor,
     sound_engine: ^SoundEngine,
@@ -407,43 +418,43 @@ line_input_handle_input :: proc(
     modified := false
     defer if modified
     {
-        strings.write_rune(&li.text, 0)
+        strings.write_rune(&line_input.text, 0)
     }
 
     if (
         IsKeyDown(KeyboardKey.BACKSPACE)
-        && strings.builder_len(li.text) > 1
+        && strings.builder_len(line_input.text) > 1
     )
     {
-        strings.pop_rune(&li.text)
+        strings.pop_rune(&line_input.text)
         modified = true
 
         if IsKeyPressed(KeyboardKey.BACKSPACE)
         {
-            strings.pop_rune(&li.text)
+            strings.pop_rune(&line_input.text)
             sound_engine_play(sound_engine, "kb_delete")
         }
 
         deletion_ticks += 1
 
         if deletion_ticks >= DELETION_THRESHOLD + DELETION_DELAY {
-            strings.pop_rune(&li.text)
+            strings.pop_rune(&line_input.text)
             deletion_ticks -= DELETION_DELAY
             sound_engine_play(sound_engine, "kb_delete")
         }
 
         // TODO: improve this, this is hard to read and probably unclear
-        li.offset -= 1
+        line_input.offset -= 1
 
         for (
-            line_input_get_text_width(li, font) < f32(MAX_INPUT_WIDTH)
-            && li.offset >= 0
+            line_input_get_text_width(line_input, font) < f32(MAX_INPUT_WIDTH)
+            && line_input.offset >= 0
         )
         {
-            li.offset -= 1
+            line_input.offset -= 1
         }
 
-        li.offset += 1
+        line_input.offset += 1
 
         return
     }
@@ -455,7 +466,7 @@ line_input_handle_input :: proc(
         || IsKeyDown(KeyboardKey.RIGHT_CONTROL)
     )
     {
-        line_input_handle_control(li)
+        line_input_handle_control(line_input, monitor)
         return
     }
 
@@ -463,7 +474,7 @@ line_input_handle_input :: proc(
 
     if c != 0
     {
-        strings.pop_rune(&li.text)
+        strings.pop_rune(&line_input.text)
         modified = true
 
         if c == ' '
@@ -478,12 +489,12 @@ line_input_handle_input :: proc(
 
     for ; c != 0; c = GetCharPressed()
     {
-        strings.write_rune(&li.text, c)
+        strings.write_rune(&line_input.text, c)
     }
 
-    for line_input_get_text_width(li, font) >= f32(MAX_INPUT_WIDTH)
+    for line_input_get_text_width(line_input, font) >= f32(MAX_INPUT_WIDTH)
     {
-        li.offset += 1
+        line_input.offset += 1
     }
 }
 
