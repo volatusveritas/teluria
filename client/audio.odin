@@ -63,7 +63,8 @@ sound_bank_play :: proc(sb: ^SoundBank) -> bool
 
 audio_engine_make :: proc() -> (^miniaudio.engine, bool)
 {
-    ptr, alloc_err := mem.alloc(size_of(miniaudio.engine))
+    // ptr, alloc_err := mem.alloc(size_of(miniaudio.engine))
+    ptr, alloc_err := new(miniaudio.engine)
 
     if alloc_err != .None
     {
@@ -85,6 +86,7 @@ audio_engine_make :: proc() -> (^miniaudio.engine, bool)
 audio_engine_destroy :: proc(ae: ^miniaudio.engine)
 {
     miniaudio.engine_uninit(ae)
+    free(ae)
 }
 
 SoundEngine :: struct

@@ -1,8 +1,9 @@
 package client
 
 import "core:fmt"
-import "core:strings"
+import "core:mem"
 import "core:strconv"
+import "core:strings"
 
 import "vendor:raylib"
 import enet "vendor:ENet"
@@ -132,6 +133,8 @@ cmd_connect :: proc(
 
     peer, err := net_client_connect(network.client, host, port)
 
+    delete(host)
+
     network.peer = peer
 
     switch err
@@ -184,6 +187,16 @@ builtin_command_connect :: proc(
                 network,
             )
         },
+        proc(data: rawptr)
+        {
+            prompt_data := (^ConnectPromptData)(data)
+
+            delete(prompt_data.host)
+            delete(prompt_data.username)
+            delete(prompt_data.password)
+
+            mem.free(data)
+        },
     )
 
     prompt_add_step(
@@ -198,7 +211,7 @@ builtin_command_connect :: proc(
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
-            prompt_data.host = input
+            prompt_data.host = strings.clone(input)
             return true
         },
     )
@@ -250,7 +263,7 @@ builtin_command_connect :: proc(
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
-            prompt_data.username = input
+            prompt_data.username = strings.clone(input)
 
             monitor_append_line(
                 monitor,
@@ -278,7 +291,7 @@ builtin_command_connect :: proc(
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
-            prompt_data.password = input
+            prompt_data.password = strings.clone(input)
 
             line_input.silent = false
             return true
@@ -567,6 +580,27 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
 main :: proc()
 {
     using raylib
+
+    track := mem.Tracking_Allocator{}
+    mem.tracking_allocator_init(&track, context.allocator)
+    context.allocator = mem.tracking_allocator(&track)
+
+    // Straight up stolen from Odin's Overview
+    // defer {
+        // if len(track.allocation_map) > 0 {
+            // fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+            // for _, entry in track.allocation_map {
+                // fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+            // }
+        // }
+        // if len(track.bad_free_array) > 0 {
+            // fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+            // for entry in track.bad_free_array {
+                // fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+            // }
+        // }
+        // mem.tracking_allocator_destroy(&track)
+    // }
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     defer CloseWindow()

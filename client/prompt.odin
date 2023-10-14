@@ -19,19 +19,25 @@ Prompt :: struct
     messages: [dynamic]cstring,
     steps: [dynamic]PromptStep,
     done_callback: PromptDoneCallback,
+    destroy_callback: #type proc(rawptr),
     next_step: int,
 }
 
-prompt_make :: proc(data: rawptr, done_callback: PromptDoneCallback) -> ^Prompt
+prompt_make :: proc(
+    data: rawptr,
+    done_callback: PromptDoneCallback,
+    destroy_callback: #type proc(rawptr),
+) -> ^Prompt
 {
     // TODO: handle the error here
-    prompt_ptr, _ := mem.alloc(size_of(Prompt))
+    prompt_ptr, _ := new(Prompt)
     prompt := (^Prompt)(prompt_ptr)
 
     prompt.data = data
     prompt.messages = make([dynamic]cstring)
     prompt.steps = make([dynamic]PromptStep)
     prompt.done_callback = done_callback
+    prompt.destroy_callback = destroy_callback
     prompt.next_step = 0
 
     return prompt
@@ -39,9 +45,11 @@ prompt_make :: proc(data: rawptr, done_callback: PromptDoneCallback) -> ^Prompt
 
 prompt_destroy :: proc(prompt: ^Prompt)
 {
-    mem.free(prompt.data)
     delete(prompt.messages)
     delete(prompt.steps)
+
+    // mem.free(prompt.data)
+    prompt.destroy_callback(prompt.data)
 
     mem.free(prompt)
 }
@@ -72,6 +80,8 @@ prompt_process_step :: proc(
         line_input,
         network,
     )
+
+    delete(input)
 
     if prompt.next_step == len(prompt.steps) - 1
     {
