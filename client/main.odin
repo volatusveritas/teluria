@@ -67,11 +67,16 @@ Monitor :: struct
 {
     lines: [dynamic]cstring,
     colors: [dynamic]raylib.Color,
+    exit: bool,
 }
 
 monitor_make :: proc() -> Monitor
 {
-    return Monitor { {}, {} }
+    return Monitor {
+        lines = {},
+        colors = {},
+        exit = false,
+    }
 }
 
 monitor_destroy :: proc(m: ^Monitor)
@@ -331,6 +336,8 @@ handle_command :: proc(
             builtin_command_connect(&command, line_input, monitor, network)
         case "disconnect":
             builtin_command_disconnect(&command, monitor, network)
+        case "exit":
+            monitor.exit = true
         case:
             if network.status != .CONNECTED
             {
@@ -677,7 +684,7 @@ main :: proc()
 
     // line_input.silent = true
 
-    for !WindowShouldClose()
+    for !WindowShouldClose() && !monitor.exit
     {
         if network.status == .CONNECTING
         {
