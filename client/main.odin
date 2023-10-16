@@ -606,26 +606,58 @@ main :: proc()
 {
     using raylib
 
-    // track := mem.Tracking_Allocator{}
-    // mem.tracking_allocator_init(&track, context.allocator)
-    // context.allocator = mem.tracking_allocator(&track)
+    when #config(DEBUG, false)
+    {
+        track: mem.Tracking_Allocator = {}
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
 
-    // Straight up stolen from Odin's Overview
-    // defer {
-        // if len(track.allocation_map) > 0 {
-            // fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-            // for _, entry in track.allocation_map {
-                // fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-            // }
-        // }
-        // if len(track.bad_free_array) > 0 {
-            // fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-            // for entry in track.bad_free_array {
-                // fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-            // }
-        // }
-        // mem.tracking_allocator_destroy(&track)
-    // }
+        defer {
+            memory_mistakes: bool = false
+
+            fmt.println("\n    Tracking allocator status report\n")
+
+            if len(track.allocation_map) > 0
+            {
+                memory_mistakes = true
+
+                fmt.eprintf(
+                    "=== %v allocations not freed: ===\n",
+                    len(track.allocation_map),
+                )
+
+                for _, entry in track.allocation_map
+                {
+                    fmt.eprintf(
+                        "- %v bytes @ %v\n",
+                        entry.size,
+                        entry.location,
+                    )
+                }
+            }
+
+            if len(track.bad_free_array) > 0
+            {
+                memory_mistakes = true
+
+                fmt.eprintf(
+                    "=== %v incorrect frees: ===\n",
+                    len(track.bad_free_array),
+                )
+
+                for entry in track.bad_free_array
+                {
+                    fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+                }
+            }
+
+            mem.tracking_allocator_destroy(&track)
+
+            if !memory_mistakes {
+                fmt.printf("=== No memory mistakes found. ===")
+            }
+        }
+    }
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     defer CloseWindow()
