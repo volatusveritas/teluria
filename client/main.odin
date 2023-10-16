@@ -66,6 +66,7 @@ SFX_SPACE_POLYPHONY : int : 1
 Monitor :: struct
 {
     lines: [dynamic]cstring,
+    allocated_lines: [dynamic]cstring,
     colors: [dynamic]raylib.Color,
     exit: bool,
 }
@@ -74,15 +75,22 @@ monitor_make :: proc() -> Monitor
 {
     return Monitor {
         lines = {},
+        allocated_lines = {},
         colors = {},
         exit = false,
     }
 }
 
-monitor_destroy :: proc(m: ^Monitor)
+monitor_destroy :: proc(monitor: ^Monitor)
 {
-    delete(m.lines)
-    delete(m.colors)
+    for line in monitor.allocated_lines
+    {
+        delete(line)
+    }
+
+    delete(monitor.lines)
+    delete(monitor.allocated_lines)
+    delete(monitor.colors)
 }
 
 monitor_append_line :: proc(
@@ -92,6 +100,16 @@ monitor_append_line :: proc(
 )
 {
     append(&m.lines, line)
+    append(&m.colors, color)
+}
+
+monitor_append_allocated_line :: proc(
+    m: ^Monitor,
+    line: cstring,
+    color: raylib.Color = COLOR_TEXT,
+)
+{
+    append(&m.allocated_lines, line)
     append(&m.colors, color)
 }
 
@@ -242,7 +260,7 @@ builtin_command_connect :: proc(
             prompt_data := (^ConnectPromptData)(data)
             prompt_data.port = u16(port)
 
-            monitor_append_line(
+            monitor_append_allocated_line(
                 monitor,
                 fmt.caprintf(
                     "[Connect] You have provided the address '%v:%v'.",
@@ -270,7 +288,7 @@ builtin_command_connect :: proc(
             prompt_data := (^ConnectPromptData)(data)
             prompt_data.username = strings.clone(input)
 
-            monitor_append_line(
+            monitor_append_allocated_line(
                 monitor,
                 fmt.caprintf(
                     "[Connect] You have provided the username '%v'.",
@@ -588,9 +606,9 @@ main :: proc()
 {
     using raylib
 
-    track := mem.Tracking_Allocator{}
-    mem.tracking_allocator_init(&track, context.allocator)
-    context.allocator = mem.tracking_allocator(&track)
+    // track := mem.Tracking_Allocator{}
+    // mem.tracking_allocator_init(&track, context.allocator)
+    // context.allocator = mem.tracking_allocator(&track)
 
     // Straight up stolen from Odin's Overview
     // defer {
@@ -722,7 +740,7 @@ main :: proc()
 
                         new_line := strings.clone_to_cstring(pk_text)
 
-                        monitor_append_line(&monitor, new_line)
+                        monitor_append_allocated_line(&monitor, new_line)
 
                         enet.packet_destroy(network.event.packet)
                 }
