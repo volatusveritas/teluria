@@ -15,36 +15,16 @@ SCREEN_HEIGHT : i32 : 640
 SCREEN_TITLE  : cstring : "Teluria Window"
 SCREEN_FPS    : i32 : 60
 
-COLOR_BACKGROUND : raylib.Color : raylib.LIGHTGRAY
-COLOR_TEXTBOX    : raylib.Color : raylib.RAYWHITE
-COLOR_CURSOR     : raylib.Color : raylib.GRAY
-COLOR_OFFSET_BOX : raylib.Color : raylib.BLUE
-COLOR_TEXT       : raylib.Color : raylib.BLACK
-
+COLOR_BACKGROUND  : raylib.Color : raylib.LIGHTGRAY
+COLOR_TEXTBOX     : raylib.Color : raylib.RAYWHITE
+COLOR_CURSOR      : raylib.Color : raylib.GRAY
+COLOR_OFFSET_BOX  : raylib.Color : raylib.BLUE
+COLOR_TEXT        : raylib.Color : raylib.BLACK
 COLOR_MSG_ERR     : raylib.Color : raylib.RED
 COLOR_MSG_SUCCESS : raylib.Color : raylib.GREEN
 
-FONT_SIZE    : i32 : 16
-FONT_SPACING : f32 = 0.0
-
 PADDING      : i32 : FONT_SIZE / 3
 TEXT_PADDING : i32 : FONT_SIZE / 4
-
-LINE_INPUT_HEIGHT : i32 : FONT_SIZE + 2 * TEXT_PADDING
-LINE_INPUT_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
-LINE_INPUT_X      : i32 : PADDING
-LINE_INPUT_Y      : i32 : SCREEN_HEIGHT - LINE_INPUT_HEIGHT - PADDING
-LINE_INPUT_ROUND  : f32 : 16.0
-LINE_INPUT_RADIUS : f32 : LINE_INPUT_ROUND / f32(LINE_INPUT_HEIGHT)
-LINE_INPUT_SEGS   : i32 : 16
-
-MONITOR_HEIGHT : i32 : SCREEN_HEIGHT - 3 * PADDING - LINE_INPUT_HEIGHT
-MONITOR_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
-MONITOR_X      : i32 : PADDING
-MONITOR_Y      : i32 : PADDING
-MONITOR_ROUND  : f32 : 16.0
-MONITOR_RADIUS : f32 : MONITOR_ROUND / f32(MONITOR_HEIGHT)
-MONITOR_SEGS   : i32 : 16
 
 CURSOR_WIDTH : f32 : f32(FONT_SIZE) / 16.0
 CURSOR_SPEED : f32 : 16.0
@@ -63,86 +43,11 @@ SFX_DELETE_POLYPHONY : int : 5
 SFX_SPACE_VOLUME : f32 : 0.20
 SFX_SPACE_POLYPHONY : int : 1
 
-Monitor :: struct
+Screen :: struct
 {
-    lines: [dynamic]cstring,
-    allocated_lines: [dynamic]cstring,
-    colors: [dynamic]raylib.Color,
-    exit: bool,
-}
-
-monitor_make :: proc() -> Monitor
-{
-    return Monitor {
-        lines = {},
-        allocated_lines = {},
-        colors = {},
-        exit = false,
-    }
-}
-
-monitor_destroy :: proc(monitor: ^Monitor)
-{
-    for line in monitor.allocated_lines
-    {
-        delete(line)
-    }
-
-    delete(monitor.lines)
-    delete(monitor.allocated_lines)
-    delete(monitor.colors)
-}
-
-monitor_append_line :: proc(
-    m: ^Monitor,
-    line: cstring,
-    color: raylib.Color = COLOR_TEXT,
-)
-{
-    append(&m.lines, line)
-    append(&m.colors, color)
-}
-
-monitor_append_allocated_line :: proc(
-    m: ^Monitor,
-    line: cstring,
-    color: raylib.Color = COLOR_TEXT,
-)
-{
-    append(&m.allocated_lines, line)
-    append(&m.colors, color)
-}
-
-monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
-{
-    using raylib
-
-    DrawRectangleRounded(
-        {
-            f32(MONITOR_X),
-            f32(MONITOR_Y),
-            f32(MONITOR_WIDTH),
-            f32(MONITOR_HEIGHT),
-        },
-        MONITOR_RADIUS,
-        MONITOR_SEGS,
-        COLOR_TEXTBOX,
-    )
-
-    for i in 0..<len(m.lines)
-    {
-        DrawTextEx(
-            font,
-            m.lines[i],
-            {
-                f32(MONITOR_X + TEXT_PADDING),
-                f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
-            },
-            f32(FONT_SIZE),
-            FONT_SPACING,
-            m.colors[i],
-        )
-    }
+    should_exit: bool,
+    monitor: Monitor,
+    line_input: LineInput,
 }
 
 cmd_connect :: proc(
@@ -164,6 +69,7 @@ cmd_connect :: proc(
     {
         case .SUCCESS:
             network.status = .CONNECTING
+            network.connection_time = 0.0
         case .RESOLVE_HOST:
             monitor_append_line(
                 monitor,
@@ -189,15 +95,14 @@ ConnectPromptData :: struct
 
 builtin_command_connect :: proc(
     cmd: ^shared.Command,
-    line_input: ^LineInput,
-    monitor: ^Monitor,
+    screen: ^Screen,
     network: ^Network,
 )
 {
     // TODO: handle the error here
     prompt_data_ptr, _ := new(ConnectPromptData)
 
-    line_input.active_prompt = prompt_make(
+    screen.line_input.active_prompt = prompt_make(
         prompt_data_ptr,
         proc(data: rawptr, monitor: ^Monitor, network: ^Network)
         {
@@ -223,7 +128,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        line_input.active_prompt,
+        screen.line_input.active_prompt,
         "[Connect] Please type the server's address.",
         proc(
             data: rawptr,
@@ -240,7 +145,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        line_input.active_prompt,
+        screen.line_input.active_prompt,
         "[Connect] Please type the server's port.",
         proc(
             data: rawptr,
@@ -275,7 +180,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        line_input.active_prompt,
+        screen.line_input.active_prompt,
         "[Connect] Please type your username.",
         proc(
             data: rawptr,
@@ -303,7 +208,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        line_input.active_prompt,
+        screen.line_input.active_prompt,
         "[Connect] Please type your password.",
         proc(
             data: rawptr,
@@ -321,7 +226,7 @@ builtin_command_connect :: proc(
         },
     )
 
-    prompt_process_start(line_input.active_prompt, monitor)
+    prompt_process_start(screen.line_input.active_prompt, &screen.monitor)
 }
 
 builtin_command_disconnect :: proc(
@@ -339,35 +244,34 @@ builtin_command_disconnect :: proc(
     monitor_append_line(monitor, "Disconnecting...")
 }
 
-handle_command :: proc(
-    line_input: ^LineInput,
-    monitor: ^Monitor,
-    network: ^Network,
-)
+handle_command :: proc(screen: ^Screen, network: ^Network)
 {
-    strings.pop_rune(&line_input.text)
-    command := shared.command_make(strings.to_string(line_input.text))
+    strings.pop_rune(&screen.line_input.text)
+    command := shared.command_make(strings.to_string(screen.line_input.text))
 
     switch shared.command_get_next(&command)
     {
         case "connect":
-            builtin_command_connect(&command, line_input, monitor, network)
+            builtin_command_connect(&command, screen, network)
         case "disconnect":
-            builtin_command_disconnect(&command, monitor, network)
+            builtin_command_disconnect(&command, &screen.monitor, network)
         case "exit":
-            monitor.exit = true
+            screen.should_exit = true
         case:
             if network.status != .CONNECTED
             {
-                monitor_append_line(monitor, "No such built-in command.")
+                monitor_append_line(
+                    &screen.monitor,
+                    "No such built-in command.",
+                )
                 return
             }
 
-            strings.write_rune(&line_input.text, 0)
+            strings.write_rune(&screen.line_input.text, 0)
 
             packet := enet.packet_create(
-                rawptr(raw_data(strings.to_string(line_input.text))),
-                uint(strings.builder_len(line_input.text)),
+                rawptr(raw_data(strings.to_string(screen.line_input.text))),
+                uint(strings.builder_len(screen.line_input.text)),
                 .RELIABLE,
             )
 
@@ -375,237 +279,112 @@ handle_command :: proc(
     }
 }
 
-LineInput :: struct
+draw_step :: proc(screen: ^Screen, fonts: ^Fonts)
 {
-    text: strings.Builder,
-    offset: i32,
-    silent: bool,
-    active_prompt: ^Prompt,
+    raylib.BeginDrawing()
+    defer raylib.EndDrawing()
+
+    raylib.ClearBackground(COLOR_BACKGROUND)
+
+    monitor_draw(&screen.monitor, fonts.serif)
+    line_input_draw(&screen.line_input, fonts.serif)
 }
 
-line_input_make :: proc() -> LineInput
-{
-    line_input := LineInput {
-        text = strings.builder_make(),
-        offset = 0,
-        silent = false,
-        active_prompt = nil,
-    }
-
-    strings.write_rune(&line_input.text, 0)
-
-    return line_input
-}
-
-line_input_destroy :: proc(li: ^LineInput)
-{
-    strings.builder_destroy(&li.text)
-}
-
-line_input_reset :: proc(line_input: ^LineInput)
-{
-    strings.builder_reset(&line_input.text)
-    strings.write_rune(&line_input.text, 0)
-}
-
-line_input_remake :: proc(line_input: ^LineInput)
-{
-    line_input_reset(line_input)
-    prompt_destroy(line_input.active_prompt)
-    line_input.active_prompt = nil
-
-    line_input.silent = false
-}
-
-line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
-{
-    return raylib.MeasureTextEx(
-        font,
-        line_input_to_cstring(li),
-        f32(FONT_SIZE),
-        0.0,
-    ).x
-}
-
-line_input_handle_control :: proc(line_input: ^LineInput, monitor: ^Monitor)
-{
-    using raylib
-
-    #partial switch GetKeyPressed()
-    {
-        case KeyboardKey.U:
-            line_input_reset(line_input)
-        case KeyboardKey.C:
-            monitor_append_line(monitor, "Input cancelled by the user.")
-            line_input_remake(line_input)
-    }
-}
-
-line_input_handle_input :: proc(
-    line_input: ^LineInput,
-    font: raylib.Font,
-    monitor: ^Monitor,
+process_input :: proc(
+    network: ^Network,
+    screen: ^Screen,
+    fonts: ^Fonts,
     sound_engine: ^SoundEngine,
 )
 {
-    using raylib
-
-    // TODO: make this work with delta instead of ticks
-    @(static) deletion_ticks: int = 0
-
-    modified := false
-    defer if modified
+    if raylib.IsKeyPressed(raylib.KeyboardKey.ENTER)
     {
-        strings.write_rune(&line_input.text, 0)
-    }
-
-    if (
-        IsKeyDown(KeyboardKey.BACKSPACE)
-        && strings.builder_len(line_input.text) > 1
-    )
-    {
-        strings.pop_rune(&line_input.text)
-        modified = true
-
-        if IsKeyPressed(KeyboardKey.BACKSPACE)
+        if screen.line_input.active_prompt != nil
         {
-            strings.pop_rune(&line_input.text)
-            sound_engine_play(sound_engine, "kb_delete")
-        }
+            strings.pop_rune(&screen.line_input.text)
 
-        deletion_ticks += 1
-
-        if deletion_ticks >= DELETION_THRESHOLD + DELETION_DELAY {
-            strings.pop_rune(&line_input.text)
-            deletion_ticks -= DELETION_DELAY
-            sound_engine_play(sound_engine, "kb_delete")
-        }
-
-        // TODO: improve this, this is hard to read and probably unclear
-        line_input.offset -= 1
-
-        for (
-            line_input_get_text_width(line_input, font) < f32(MAX_INPUT_WIDTH)
-            && line_input.offset >= 0
-        )
-        {
-            line_input.offset -= 1
-        }
-
-        line_input.offset += 1
-
-        return
-    }
-
-    deletion_ticks = 0
-
-    if (
-        IsKeyDown(KeyboardKey.LEFT_CONTROL)
-        || IsKeyDown(KeyboardKey.RIGHT_CONTROL)
-    )
-    {
-        line_input_handle_control(line_input, monitor)
-        return
-    }
-
-    c: rune = GetCharPressed()
-
-    if c != 0
-    {
-        strings.pop_rune(&line_input.text)
-        modified = true
-
-        if c == ' '
-        {
-            sound_engine_play(sound_engine, "kb_space")
+            if !prompt_process_step(
+                screen.line_input.active_prompt,
+                strings.clone(strings.to_string(screen.line_input.text)),
+                &screen.monitor,
+                &screen.line_input,
+                network,
+            )
+            {
+                prompt_destroy(screen.line_input.active_prompt)
+                screen.line_input.active_prompt = nil
+            }
         }
         else
         {
-            sound_engine_play(sound_engine, "kb_type")
+            handle_command(screen, network)
         }
-    }
 
-    for ; c != 0; c = GetCharPressed()
-    {
-        strings.write_rune(&line_input.text, c)
-    }
-
-    for line_input_get_text_width(line_input, font) >= f32(MAX_INPUT_WIDTH)
-    {
-        line_input.offset += 1
-    }
-}
-
-line_input_to_cstring :: proc(li: ^LineInput) -> cstring
-{
-    return cstring(raw_data(strings.to_string(li.text))[li.offset:])
-}
-
-line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
-{
-    using raylib
-
-    @(static) cursor_offset: f32 = 0.0
-
-    DrawRectangleRounded(
-        {
-            f32(LINE_INPUT_X),
-            f32(LINE_INPUT_Y),
-            f32(LINE_INPUT_WIDTH),
-            f32(LINE_INPUT_HEIGHT),
-        },
-        LINE_INPUT_RADIUS,
-        LINE_INPUT_SEGS,
-        COLOR_TEXTBOX,
-    )
-
-    if !li.silent
-    {
-        DrawTextEx(
-            font,
-            line_input_to_cstring(li),
-            {
-                f32(LINE_INPUT_X + TEXT_PADDING),
-                f32(LINE_INPUT_Y + TEXT_PADDING),
-            },
-            f32(FONT_SIZE),
-            FONT_SPACING,
-            COLOR_TEXT,
-        )
-
-        cursor_offset += (
-            (line_input_get_text_width(li, font) - cursor_offset)
-            * GetFrameTime()
-            * CURSOR_SPEED
-        )
+        line_input_reset(&screen.line_input)
     }
     else
     {
-        cursor_offset += (
-            (0 - cursor_offset)
-            * GetFrameTime()
-            * CURSOR_SPEED
-        )
+        line_input_handle_input(screen, fonts.serif, sound_engine)
+    }
+}
+
+network_step :: proc(network: ^Network, screen: ^Screen)
+{
+    if network.status == .CONNECTING
+    {
+        network.connection_time += raylib.GetFrameTime()
+
+        if network.connection_time >= 5.0
+        {
+            enet.peer_reset(network.peer)
+            network.status = .STALLED
+            network.connection_time = 0.0
+            monitor_append_line(
+                &screen.monitor,
+                "Connection failed.",
+                COLOR_MSG_ERR,
+            )
+        }
     }
 
-    DrawLineEx(
-        {
-            f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-            f32(LINE_INPUT_Y + TEXT_PADDING),
-        },
-        {
-            f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
-            f32(LINE_INPUT_Y + TEXT_PADDING + FONT_SIZE),
-        },
-        CURSOR_WIDTH,
-        COLOR_CURSOR,
-    )
+    switch network_poll(network)
+    {
+        case .NO_EVENT:
+            // Nothing should be done in this case
+        case .FAILURE:
+            monitor_append_line(
+                &screen.monitor,
+                "An error ocurred while trying to poll events.",
+                COLOR_MSG_ERR,
+            )
+        case .EVENT:
+            switch network.event.type
+            {
+                case .NONE:
+                    // Nothing should be done in this case
+                case .CONNECT:
+                    network.status = .CONNECTED
+                    monitor_append_line(
+                        &screen.monitor,
+                        "Successfully connected.",
+                        COLOR_MSG_SUCCESS,
+                    )
+                case .DISCONNECT:
+                    network.status = .STALLED
+                    monitor_append_line(
+                        &screen.monitor,
+                        "Disconnected from the server.",
+                    )
+                case .RECEIVE:
+                    // TODO: handle packet
+
+                    enet.packet_destroy(network.event.packet)
+            }
+    }
 }
 
 main :: proc()
 {
-    using raylib
-
     when #config(DEBUG, false)
     {
         track: mem.Tracking_Allocator = {}
@@ -659,19 +438,21 @@ main :: proc()
         }
     }
 
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    defer CloseWindow()
+    raylib.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+    defer raylib.CloseWindow()
 
-    SetTargetFPS(SCREEN_FPS)
+    raylib.SetTargetFPS(SCREEN_FPS)
 
-    serif_font := LoadFontEx("assets/font/s_regular.ttf", FONT_SIZE, nil, 0)
-    defer UnloadFont(serif_font)
+    fonts := fonts_make()
+    defer fonts_destroy(&fonts)
 
-    monitor := monitor_make()
-    defer monitor_destroy(&monitor)
+    screen := Screen {
+        monitor = monitor_make(),
+        line_input = line_input_make(),
+    }
 
-    line_input := line_input_make()
-    defer line_input_destroy(&line_input)
+    defer monitor_destroy(&screen.monitor)
+    defer line_input_destroy(&screen.line_input)
 
     sound_engine, ok := sound_engine_make()
 
@@ -713,128 +494,26 @@ main :: proc()
         return
     }
 
-    if !net_make()
+    network, err := network_make()
+
+    switch err
     {
-        fmt.eprintln("Failed to initialize the networking engine.")
-        return
+        case .NONE:
+            // Nothing should be done
+        case .FAILED_TO_INITIALIZE:
+            fmt.println("Failed to initialize the Network module.")
+            return
+        case .FAILED_TO_CREATE_HOST:
+            fmt.println("Failed to create host.")
+            return
     }
 
-    defer net_destroy()
+    defer network_destroy(&network)
 
-    network: Network
-    network.client = net_client_make()
-
-    if network.client == nil
+    for !raylib.WindowShouldClose() && !screen.should_exit
     {
-        fmt.eprintln("Failed to initialize the network client.")
-        return
-    }
-
-    defer net_client_destroy(&network, network.client)
-
-    // line_input.silent = true
-
-    for !WindowShouldClose() && !monitor.exit
-    {
-        if network.status == .CONNECTING
-        {
-            network.connection_time += GetFrameTime()
-        }
-
-        switch network_poll(&network)
-        {
-            case .NO_EVENT:
-
-            case .EVENT:
-                switch network.event.type
-                {
-                    case .NONE:
-
-                    case .CONNECT:
-                        network.status = .CONNECTED
-                        network.connection_time = 0.0
-                        monitor_append_line(
-                            &monitor,
-                            "Successfully connected.",
-                            COLOR_MSG_SUCCESS,
-                        )
-                    case .DISCONNECT:
-                        network.status = .STALLED
-                        monitor_append_line(
-                            &monitor,
-                            "Disconnected from the server.",
-                        )
-                    case .RECEIVE:
-                        pk_text := strings.string_from_ptr(
-                            network.event.packet.data,
-                            int(network.event.packet.dataLength),
-                        )
-
-                        new_line := strings.clone_to_cstring(pk_text)
-
-                        monitor_append_allocated_line(&monitor, new_line)
-
-                        enet.packet_destroy(network.event.packet)
-                }
-            case .FAILURE:
-                monitor_append_line(
-                    &monitor,
-                    "An error ocurred while trying to poll events.",
-                    COLOR_MSG_ERR,
-                )
-        }
-
-        if network.status == .CONNECTING && network.connection_time >= 5.0
-        {
-            enet.peer_reset(network.peer)
-            network.status = .STALLED
-            network.connection_time = 0.0
-            monitor_append_line(
-                &monitor,
-                "Connection failed.",
-                COLOR_MSG_ERR,
-            )
-        }
-
-        if IsKeyPressed(KeyboardKey.ENTER)
-        {
-            if line_input.active_prompt != nil
-            {
-                strings.pop_rune(&line_input.text)
-
-                if !prompt_process_step(
-                    line_input.active_prompt,
-                    strings.clone(strings.to_string(line_input.text)),
-                    &monitor,
-                    &line_input,
-                    &network,
-                )
-                {
-                    prompt_destroy(line_input.active_prompt)
-                    line_input.active_prompt = nil
-                }
-            }
-            else
-            {
-                handle_command(&line_input, &monitor, &network)
-            }
-
-            line_input_reset(&line_input)
-        }
-        else
-        {
-            line_input_handle_input(
-                &line_input, serif_font, &monitor, &sound_engine,
-            )
-        }
-
-        BeginDrawing()
-        defer EndDrawing()
-
-        ClearBackground(COLOR_BACKGROUND)
-
-        monitor_draw(&monitor, serif_font)
-
-        line_input_draw(&line_input, serif_font)
+        network_step(&network, &screen)
+        process_input(&network, &screen, &fonts, &sound_engine)
+        draw_step(&screen, &fonts)
     }
 }

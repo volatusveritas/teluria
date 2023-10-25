@@ -8,6 +8,13 @@ CONNECTION_CHANNELS : uint : 2
 CONNECTION_BANDWIDTH_IN : u32 = 0
 CONNECTION_BANDWIDTH_OUT : u32 = 0
 
+NetworkErr :: enum
+{
+    NONE,
+    FAILED_TO_INITIALIZE,
+    FAILED_TO_CREATE_HOST,
+}
+
 NetworkPollErr :: enum
 {
     EVENT,
@@ -31,14 +38,52 @@ Network :: struct
     status: NetworkStatus,
 }
 
-network_poll :: proc(n: ^Network) -> NetworkPollErr
+network_make :: proc() -> (Network, NetworkErr)
 {
-    if n.status == .STALLED
+    if enet.initialize() < 0
+    {
+        return {}, .FAILED_TO_INITIALIZE
+    }
+
+    host := enet.host_create(
+        nil,
+        CONNECTION_PEERS,
+        CONNECTION_CHANNELS,
+        CONNECTION_BANDWIDTH_IN,
+        CONNECTION_BANDWIDTH_OUT,
+    )
+
+    if host == nil
+    {
+        enet.deinitialize()
+        return {}, .FAILED_TO_CREATE_HOST
+    }
+
+    network := Network {
+        client = host,
+        connection_time = 0.0,
+        event = {},
+        peer = nil,
+        status = .STALLED,
+    }
+
+    return network, .NONE
+}
+
+network_destroy :: proc(network: ^Network)
+{
+    enet.deinitialize()
+    enet.host_destroy(network.client)
+}
+
+network_poll :: proc(network: ^Network) -> NetworkPollErr
+{
+    if network.status == .STALLED
     {
         return NetworkPollErr.NO_EVENT
     }
 
-    result := enet.host_service(n.client, &n.event, 0)
+    result := enet.host_service(network.client, &network.event, 0)
 
     if result > 0
     {
@@ -59,32 +104,6 @@ NetErr :: enum
     SUCCESS,
     RESOLVE_HOST,
     ATTEMPT_CONNECTION,
-}
-
-net_make :: proc() -> bool
-{
-    return enet.initialize() == 0
-}
-
-net_destroy :: proc()
-{
-    enet.deinitialize()
-}
-
-net_client_make :: proc() -> ^enet.Host
-{
-    return enet.host_create(
-        nil,
-        CONNECTION_PEERS,
-        CONNECTION_CHANNELS,
-        CONNECTION_BANDWIDTH_IN,
-        CONNECTION_BANDWIDTH_OUT,
-    )
-}
-
-net_client_destroy :: proc(n: ^Network, c: ^enet.Host)
-{
-    enet.host_destroy(c)
 }
 
 net_client_connect :: proc(
