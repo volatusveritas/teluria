@@ -48,6 +48,7 @@ Screen :: struct
     should_exit: bool,
     monitor: Monitor,
     line_input: LineInput,
+    prompt: Prompt,
 }
 
 cmd_connect :: proc(
@@ -99,36 +100,39 @@ builtin_command_connect :: proc(
     network: ^Network,
 )
 {
-    // TODO: handle the error here
-    prompt_data_ptr, _ := new(ConnectPromptData)
+    data := new(ConnectPromptData)
 
-    screen.line_input.active_prompt = prompt_make(
-        prompt_data_ptr,
-        proc(data: rawptr, monitor: ^Monitor, network: ^Network)
-        {
-            prompt_data := (^ConnectPromptData)(data)
+    prompt_setup(&screen.prompt, data)
 
-            cmd_connect(
-                strings.clone_to_cstring(prompt_data.host),
-                prompt_data.port,
-                monitor,
-                network,
-            )
-        },
-        proc(data: rawptr)
-        {
-            prompt_data := (^ConnectPromptData)(data)
+    screen.prompt.destroy_callback = proc(data: rawptr)
+    {
+        prompt_data := (^ConnectPromptData)(data)
 
-            delete(prompt_data.host)
-            delete(prompt_data.username)
-            delete(prompt_data.password)
+        delete(prompt_data.host)
+        delete(prompt_data.username)
+        delete(prompt_data.password)
 
-            mem.free(data)
-        },
+        free(data)
+    }
+
+    screen.prompt.done_callback = proc(
+        data: rawptr,
+        monitor: ^Monitor,
+        network: ^Network,
     )
+    {
+        prompt_data := (^ConnectPromptData)(data)
+
+        cmd_connect(
+            strings.clone_to_cstring(prompt_data.host),
+            prompt_data.port,
+            monitor,
+            network,
+        )
+    }
 
     prompt_add_step(
-        screen.line_input.active_prompt,
+        &screen.prompt,
         "[Connect] Please type the server's address.",
         proc(
             data: rawptr,
@@ -145,7 +149,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        screen.line_input.active_prompt,
+        &screen.prompt,
         "[Connect] Please type the server's port.",
         proc(
             data: rawptr,
@@ -180,7 +184,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        screen.line_input.active_prompt,
+        &screen.prompt,
         "[Connect] Please type your username.",
         proc(
             data: rawptr,
@@ -208,7 +212,7 @@ builtin_command_connect :: proc(
     )
 
     prompt_add_step(
-        screen.line_input.active_prompt,
+        &screen.prompt,
         "[Connect] Please type your password.",
         proc(
             data: rawptr,
@@ -226,7 +230,7 @@ builtin_command_connect :: proc(
         },
     )
 
-    prompt_process_start(screen.line_input.active_prompt, &screen.monitor)
+    prompt_process_start(screen.prompt, &screen.monitor)
 }
 
 builtin_command_disconnect :: proc(
@@ -279,15 +283,15 @@ handle_command :: proc(screen: ^Screen, network: ^Network)
     }
 }
 
-draw_step :: proc(screen: ^Screen, fonts: ^Fonts)
+draw_step :: proc(screen: Screen, fonts: Fonts)
 {
     raylib.BeginDrawing()
     defer raylib.EndDrawing()
 
     raylib.ClearBackground(COLOR_BACKGROUND)
 
-    monitor_draw(&screen.monitor, fonts.serif)
-    line_input_draw(&screen.line_input, fonts.serif)
+    monitor_draw(screen.monitor, fonts.serif)
+    line_input_draw(screen.line_input, fonts.serif)
 }
 
 process_input :: proc(
@@ -299,20 +303,20 @@ process_input :: proc(
 {
     if raylib.IsKeyPressed(raylib.KeyboardKey.ENTER)
     {
-        if screen.line_input.active_prompt != nil
+        if screen.prompt.active
         {
             strings.pop_rune(&screen.line_input.text)
 
             if !prompt_process_step(
-                screen.line_input.active_prompt,
+                &screen.prompt,
                 strings.clone(strings.to_string(screen.line_input.text)),
                 &screen.monitor,
                 &screen.line_input,
                 network,
             )
             {
-                prompt_destroy(screen.line_input.active_prompt)
-                screen.line_input.active_prompt = nil
+                prompt_reset(&screen.prompt)
+                screen.prompt.active = false
             }
         }
         else
@@ -449,10 +453,12 @@ main :: proc()
     screen := Screen {
         monitor = monitor_make(),
         line_input = line_input_make(),
+        prompt = prompt_make(),
     }
 
-    defer monitor_destroy(&screen.monitor)
+    defer monitor_destroy(screen.monitor)
     defer line_input_destroy(&screen.line_input)
+    defer prompt_destroy(screen.prompt)
 
     sound_engine, ok := sound_engine_make()
 
@@ -514,6 +520,6 @@ main :: proc()
     {
         network_step(&network, &screen)
         process_input(&network, &screen, &fonts, &sound_engine)
-        draw_step(&screen, &fonts)
+        draw_step(screen, fonts)
     }
 }

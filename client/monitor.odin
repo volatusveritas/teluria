@@ -28,7 +28,7 @@ monitor_make :: proc() -> Monitor
     }
 }
 
-monitor_destroy :: proc(monitor: ^Monitor)
+monitor_destroy :: proc(monitor: Monitor)
 {
     for line in monitor.allocated_lines
     {
@@ -41,30 +41,28 @@ monitor_destroy :: proc(monitor: ^Monitor)
 }
 
 monitor_append_line :: proc(
-    m: ^Monitor,
+    monitor: ^Monitor,
     line: cstring,
     color: raylib.Color = COLOR_TEXT,
 )
 {
-    append(&m.lines, line)
-    append(&m.colors, color)
+    append(&monitor.lines, line)
+    append(&monitor.colors, color)
 }
 
 monitor_append_allocated_line :: proc(
-    m: ^Monitor,
+    monitor: ^Monitor,
     line: cstring,
     color: raylib.Color = COLOR_TEXT,
 )
 {
-    append(&m.allocated_lines, line)
-    append(&m.colors, color)
+    append(&monitor.allocated_lines, line)
+    append(&monitor.colors, color)
 }
 
-monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
+monitor_draw :: proc(monitor: Monitor, font: raylib.Font)
 {
-    using raylib
-
-    DrawRectangleRounded(
+    raylib.DrawRectangleRounded(
         {
             f32(MONITOR_X),
             f32(MONITOR_Y),
@@ -76,18 +74,18 @@ monitor_draw :: proc(m: ^Monitor, font: raylib.Font)
         COLOR_TEXTBOX,
     )
 
-    for i in 0..<len(m.lines)
+    for i in 0..<len(monitor.lines)
     {
-        DrawTextEx(
+        raylib.DrawTextEx(
             font,
-            m.lines[i],
+            monitor.lines[i],
             {
                 f32(MONITOR_X + TEXT_PADDING),
                 f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
             },
             f32(FONT_SIZE),
             FONT_SPACING,
-            m.colors[i],
+            monitor.colors[i],
         )
     }
 }

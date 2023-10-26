@@ -1,8 +1,5 @@
 package client
 
-// Doesn't work for some reason if I have this on
-import "core:mem"
-
 PromptStep :: #type proc(
     rawptr,
     string,
@@ -12,46 +9,58 @@ PromptStep :: #type proc(
 ) -> bool
 
 PromptDoneCallback :: #type proc(rawptr, ^Monitor, ^Network)
+PromptDestroyCallback :: #type proc(rawptr)
 
 Prompt :: struct
 {
+    active: bool,
     data: rawptr,
+    destroy_callback: PromptDestroyCallback,
+    done_callback: PromptDoneCallback,
     messages: [dynamic]cstring,
-    steps: [dynamic]PromptStep,
-    done_callback: PromptDoneCallback,
-    destroy_callback: #type proc(rawptr),
     next_step: int,
+    steps: [dynamic]PromptStep,
 }
 
-prompt_make :: proc(
-    data: rawptr,
-    done_callback: PromptDoneCallback,
-    destroy_callback: #type proc(rawptr),
-) -> ^Prompt
+prompt_make :: proc() -> Prompt
 {
-    // TODO: handle the error here
-    prompt_ptr, _ := new(Prompt)
-    prompt := (^Prompt)(prompt_ptr)
-
-    prompt.data = data
-    prompt.messages = make([dynamic]cstring)
-    prompt.steps = make([dynamic]PromptStep)
-    prompt.done_callback = done_callback
-    prompt.destroy_callback = destroy_callback
-    prompt.next_step = 0
-
-    return prompt
+    return Prompt {
+        active = false,
+        data = nil,
+        destroy_callback = nil,
+        done_callback = nil,
+        messages = make([dynamic]cstring),
+        next_step = 0,
+        steps = make([dynamic]PromptStep),
+    }
 }
 
-prompt_destroy :: proc(prompt: ^Prompt)
+prompt_reset :: proc(prompt: ^Prompt)
+{
+    if prompt.destroy_callback != nil
+    {
+        prompt.destroy_callback(prompt.data)
+    }
+
+    clear(&prompt.messages)
+    clear(&prompt.steps)
+}
+
+prompt_destroy :: proc(prompt: Prompt)
 {
     delete(prompt.messages)
     delete(prompt.steps)
+}
 
-    // mem.free(prompt.data)
-    prompt.destroy_callback(prompt.data)
-
-    mem.free(prompt)
+prompt_setup :: proc(prompt: ^Prompt, data: rawptr)
+{
+    prompt.active = true
+    prompt.data = data
+    prompt.destroy_callback = nil
+    prompt.done_callback = nil
+    clear(&prompt.messages)
+    prompt.next_step = 0
+    clear(&prompt.steps)
 }
 
 prompt_add_step :: proc(prompt: ^Prompt, message: cstring, step: PromptStep)
@@ -60,7 +69,7 @@ prompt_add_step :: proc(prompt: ^Prompt, message: cstring, step: PromptStep)
     append(&prompt.steps, step)
 }
 
-prompt_process_start :: proc(prompt: ^Prompt, monitor: ^Monitor)
+prompt_process_start :: proc(prompt: Prompt, monitor: ^Monitor)
 {
     monitor_append_line(monitor, prompt.messages[0])
 }

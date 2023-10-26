@@ -16,7 +16,6 @@ LineInput :: struct
     text: strings.Builder,
     offset: i32,
     silent: bool,
-    active_prompt: ^Prompt,
 }
 
 line_input_make :: proc() -> LineInput
@@ -25,7 +24,6 @@ line_input_make :: proc() -> LineInput
         text = strings.builder_make(),
         offset = 0,
         silent = false,
-        active_prompt = nil,
     }
 
     strings.write_rune(&line_input.text, 0)
@@ -33,9 +31,9 @@ line_input_make :: proc() -> LineInput
     return line_input
 }
 
-line_input_destroy :: proc(li: ^LineInput)
+line_input_destroy :: proc(line_input: ^LineInput)
 {
-    strings.builder_destroy(&li.text)
+    strings.builder_destroy(&line_input.text)
 }
 
 line_input_reset :: proc(line_input: ^LineInput)
@@ -47,13 +45,10 @@ line_input_reset :: proc(line_input: ^LineInput)
 line_input_remake :: proc(line_input: ^LineInput)
 {
     line_input_reset(line_input)
-    prompt_destroy(line_input.active_prompt)
-    line_input.active_prompt = nil
-
     line_input.silent = false
 }
 
-line_input_get_text_width :: proc(li: ^LineInput, font: raylib.Font) -> f32
+line_input_get_text_width :: proc(li: LineInput, font: raylib.Font) -> f32
 {
     return raylib.MeasureTextEx(
         font,
@@ -116,7 +111,7 @@ line_input_handle_input :: proc(
         screen.line_input.offset -= 1
 
         for (
-            line_input_get_text_width(&screen.line_input, font) < f32(MAX_INPUT_WIDTH)
+            line_input_get_text_width(screen.line_input, font) < f32(MAX_INPUT_WIDTH)
             && screen.line_input.offset >= 0
         )
         {
@@ -161,24 +156,24 @@ line_input_handle_input :: proc(
         strings.write_rune(&screen.line_input.text, c)
     }
 
-    for line_input_get_text_width(&screen.line_input, font) >= f32(MAX_INPUT_WIDTH)
+    for line_input_get_text_width(screen.line_input, font) >= f32(MAX_INPUT_WIDTH)
     {
         screen.line_input.offset += 1
     }
 }
 
-line_input_to_cstring :: proc(li: ^LineInput) -> cstring
+line_input_to_cstring :: proc(line_input: LineInput) -> cstring
 {
-    return cstring(raw_data(strings.to_string(li.text))[li.offset:])
+    return cstring(
+        raw_data(strings.to_string(line_input.text))[line_input.offset:],
+    )
 }
 
-line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
+line_input_draw :: proc(line_input: LineInput, font: raylib.Font)
 {
-    using raylib
-
     @(static) cursor_offset: f32 = 0.0
 
-    DrawRectangleRounded(
+    raylib.DrawRectangleRounded(
         {
             f32(LINE_INPUT_X),
             f32(LINE_INPUT_Y),
@@ -190,11 +185,11 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
         COLOR_TEXTBOX,
     )
 
-    if !li.silent
+    if !line_input.silent
     {
-        DrawTextEx(
+        raylib.DrawTextEx(
             font,
-            line_input_to_cstring(li),
+            line_input_to_cstring(line_input),
             {
                 f32(LINE_INPUT_X + TEXT_PADDING),
                 f32(LINE_INPUT_Y + TEXT_PADDING),
@@ -205,8 +200,8 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
         )
 
         cursor_offset += (
-            (line_input_get_text_width(li, font) - cursor_offset)
-            * GetFrameTime()
+            (line_input_get_text_width(line_input, font) - cursor_offset)
+            * raylib.GetFrameTime()
             * CURSOR_SPEED
         )
     }
@@ -214,12 +209,12 @@ line_input_draw :: proc(li: ^LineInput, font: raylib.Font)
     {
         cursor_offset += (
             (0 - cursor_offset)
-            * GetFrameTime()
+            * raylib.GetFrameTime()
             * CURSOR_SPEED
         )
     }
 
-    DrawLineEx(
+    raylib.DrawLineEx(
         {
             f32(LINE_INPUT_X + TEXT_PADDING) + cursor_offset,
             f32(LINE_INPUT_Y + TEXT_PADDING),
