@@ -3,6 +3,14 @@ package client
 import "core:fmt"
 import "core:strconv"
 import "core:strings"
+import "core:mem"
+
+when !#config(DEBUG, false)
+{
+    // Abusing a compiler bug to solve a design issue; no one will convince me
+    // of the opposite.
+    _ :: mem
+}
 
 import "vendor:raylib"
 import enet "vendor:ENet"
