@@ -1,108 +1,82 @@
 package server
 
-import "core:fmt"
-import "core:strings"
+import "core:log"
 
 import enet "vendor:ENet"
+import lua "vendor:lua/5.4"
+
+HOST_POLL_TIMEOUT :: 200
+HOST_ADDRESS :: "127.0.0.1"
+HOST_PORT :: 25565
+HOST_PEER_COUNT :: 32
+HOST_CHANNELS :: 2
+HOST_INBOUND_BANDWIDTH :: 0
+HOST_OUTBOUND_BANDWIDTH :: 0
+
+handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
+{
+    teluria_call_custom_command(lua_state, cstring(event.packet.data))
+
+    enet.packet_destroy(event.packet)
+}
 
 main :: proc()
 {
-    if enet.initialize() != 0
+    console_logger := log.create_console_logger(
+        opt=log.Options{.Level} | log.Full_Timestamp_Opts,
+    )
+
+    defer log.destroy_console_logger(console_logger)
+
+    context.logger = console_logger
+
+    host, network_err := network_initialize(
+        HOST_ADDRESS,
+        HOST_PEER_COUNT,
+        HOST_CHANNELS,
+        HOST_INBOUND_BANDWIDTH,
+        HOST_OUTBOUND_BANDWIDTH,
+    )
+
+    if network_err != .None
     {
-        fmt.println("Could not initialize ENet.")
         return
     }
 
-    fmt.println("ENet successfully initialized.")
-    defer enet.deinitialize()
+    defer network_deinitialize(host)
 
-    address := enet.Address{}
+    lua_state := lua_engine_initialize()
+    defer lua_engine_deinitialize(lua_state)
 
-    if enet.address_set_host(&address, "127.0.0.1") != 0
-    {
-        fmt.println("Could not resolve the host address.")
-        return
-    }
+    lua_engine_setup_registry(lua_state, host)
+    lua_engine_expose_builtin_api(lua_state)
+    lua_engine_load_server(lua_state)
 
-    address.port = 25565
-
-    host := enet.host_create(&address, 32, 2, 0, 0)
-
-    if host == nil
-    {
-        fmt.println("Could not create the host.")
-        return
-    }
-
-    fmt.println("Host successfully created.")
-    defer enet.host_destroy(host)
-
-    fmt.println("Server successfully initialized.")
+    log.info("Polling events...")
 
     event := enet.Event{}
 
-    fmt.println("Initializing the Lua engine...")
-    lua_state := lua_engine_initialize()
-    defer lua_engine_deinitialize(lua_state)
-    fmt.println("Lua engine initialized.")
-
-    fmt.println("Setting up the Lua registry...")
-    lua_engine_setup_registry(lua_state, host)
-    fmt.println("Lua registry ready.")
-
-    fmt.println("Loading the Teluria API...")
-    lua_engine_expose_builtin_api(lua_state)
-    fmt.println("Teluria API loaded.")
-
-    fmt.println("Loading the server's Lua scripts...")
-    lua_engine_load_server(lua_state)
-    fmt.println("Server's Lua scripts loaded.")
-
-    fmt.println("Polling events...")
-    for enet.host_service(host, &event, 200) >= 0
+    for
     {
+        if enet.host_service(host, &event, HOST_POLL_TIMEOUT) < 0
+        {
+            log.error("Error while polling server events.")
+            break
+        }
+
         switch event.type
         {
             case .NONE:
-
+                // Nothing should be done in this case
             case .CONNECT:
-                fmt.println("Event received: CONNECT")
+                log.info("Event captured: CONNECT")
                 teluria_callback_on_connect(lua_state, event.peer.connectID)
             case .DISCONNECT:
-                fmt.println("Event received: DISCONNECT")
+                log.info("Event captured: DISCONNECT")
                 teluria_callback_on_disconnect(lua_state, event.peer.connectID)
             case .RECEIVE:
-                fmt.println("Event received: RECEIVE")
-
-                pk_text := strings.string_from_ptr(
-                    event.packet.data,
-                    int(event.packet.dataLength),
-                )
-
-                fmt.printf(
-                    "Packet of size %v received, contents:\n%v\n",
-                    len(pk_text),
-                    pk_text,
-                )
-
-                response: cstring = "The server received the packet."
-
-                pkt := enet.packet_create(
-                    rawptr(response),
-                    len(response),
-                    .RELIABLE,
-                )
-
-                enet.peer_send(event.peer, 0, pkt)
-
-                enet.packet_destroy(event.packet)
-
-                teluria_call_custom_command(
-                    lua_state,
-                    cstring(event.packet.data),
-                )
+                log.info("Event captured: RECEIVE")
+                handle_packet(event, lua_state)
         }
     }
-
-    fmt.println("Error while polling server events.")
 }

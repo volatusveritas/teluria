@@ -1,14 +1,20 @@
 package server
 
 import "core:fmt"
+import "core:log"
 
 import lua "vendor:lua/5.4"
 import enet "vendor:ENet"
 
 lua_engine_initialize :: proc() -> ^lua.State
 {
+    log.info("Initializing the Lua engine...")
+
     state := lua.L_newstate()
     lua.L_openlibs(state)
+
+    log.info("Lua engine initialized.")
+
     return state
 }
 
@@ -19,9 +25,14 @@ lua_engine_deinitialize :: proc(state: ^lua.State)
 
 lua_engine_load_server :: proc(state: ^lua.State)
 {
+    log.info("Loading the server's Lua scripts...")
+
     result := lua.L_dofile(state, "scripts/init.lua")
 
-    if result == 0 {
+    if result == 0
+    {
+        log.info("Server's Lua scripts loaded.")
+
         return
     }
 
@@ -35,8 +46,12 @@ lua_engine_setup_registry :: proc(
     host: ^enet.Host,
 )
 {
+    log.info("Setting up the Lua registry...")
+
     lua.pushinteger(state, lua.Integer(uintptr(host)))
     lua.setfield(state, lua.REGISTRYINDEX, "host")
+
+    log.info("Lua registry ready.")
 }
 
 @(private="file")
@@ -158,6 +173,8 @@ teluria_call_custom_command :: proc(state: ^lua.State, name: cstring)
 
 lua_engine_expose_builtin_api :: proc(state: ^lua.State)
 {
+    log.info("Loading the Teluria API...")
+
     teluria_libfuncs := []lua.L_Reg {
         { "broadcast", teluria_builtin_broadcast },
         { "send", teluria_builtin_send },
@@ -172,4 +189,6 @@ lua_engine_expose_builtin_api :: proc(state: ^lua.State)
     lua.newtable(state)
     lua.setfield(state, teluria_global_index, "commands")
     lua.pop(state, 1)
+
+    log.info("Teluria API loaded.")
 }
