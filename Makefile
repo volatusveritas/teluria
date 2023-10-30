@@ -5,7 +5,8 @@
 	run-client run-server
 
 GOPTIONS = -vet-unused -vet-shadowing -vet-style -vet-semicolon
-DOPTIONS = -define:DEBUG=true
+TR_ALLOC = -define:TR_ALLOC=true
+DOPTIONS = -debug
 ROPTIONS = -o:speed
 
 release-client:
@@ -25,10 +26,10 @@ build-server:
 build-all: build-client build-server
 
 debug-client:
-	odin build client -out:build/client_debug.exe -debug $(GOPTIONS) $(DOPTIONS)
+	odin build client -out:build/client_debug.exe $(GOPTIONS) $(DOPTIONS) $(TR_ALLOC)
 
 debug-server:
-	odin build server -out:build/server_debug.exe -debug $(GOPTIONS) $(DOPTIONS)
+	odin build server -out:build/server_debug.exe $(GOPTIONS) $(DOPTIONS) $(TR_ALLOC)
 
 debug-all: debug-client debug-server
 
@@ -41,7 +42,7 @@ check-server:
 check-all: check-client check-server
 
 run-client:
-	odin run client -out:build/client.exe $(GOPTIONS) $(DOPTIONS)
+	odin run client -out:build/client.exe $(GOPTIONS) $(DOPTIONS) $(TR_ALLOC)
 
 run-server:
-	odin run server -out:build/server.exe $(GOPTIONS) $(DOPTIONS)
+	odin run server -out:build/server.exe  $(GOPTIONS) $(DOPTIONS) $(TR_ALLOC)
