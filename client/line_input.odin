@@ -65,8 +65,14 @@ line_input_handle_control :: proc(screen: ^Screen)
         case raylib.KeyboardKey.U:
             line_input_reset(&screen.line_input)
         case raylib.KeyboardKey.C:
-            monitor_append_line(&screen.monitor, "Input cancelled by the user.")
+            monitor_append_line(
+                &screen.monitor,
+                "Input cancelled by the user.",
+            )
+
             line_input_remake(&screen.line_input)
+
+            prompt_reset(&screen.prompt)
     }
 }
 

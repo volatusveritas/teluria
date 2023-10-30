@@ -36,7 +36,7 @@ handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
 
     #partial switch type
     {
-        case .LOGIN:
+        case .LOGIN, .REGISTER:
             username, u_err := shared.network_reader_read_string(
                 &network_reader,
             )
@@ -55,11 +55,22 @@ handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
                 return
             }
 
-            log.infof(
-                "Login packet with username '%v' and password '%v'.",
-                username,
-                password,
-            )
+            if type == .LOGIN
+            {
+                log.infof(
+                    "Login packet with username '%v' and password '%v'.",
+                    username,
+                    password,
+                )
+            }
+            else
+            {
+                log.infof(
+                    "Register packet with username '%v' and password '%v'.",
+                    username,
+                    password,
+                )
+            }
     }
 
     teluria_call_custom_command(lua_state, cstring(event.packet.data))

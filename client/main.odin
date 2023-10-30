@@ -68,6 +68,7 @@ LoginCredentials :: struct
 ClientInfo :: struct
 {
     login_credentials: LoginCredentials,
+    new_account: bool,
 }
 
 ConnectPromptData :: struct
@@ -76,25 +77,29 @@ ConnectPromptData :: struct
     port: u16,
     username: string,
     password: string,
+    new_account: bool,
 }
 
 send_login_credentials :: proc(
     network: ^Network,
-    login_credentials: ^LoginCredentials,
+    client_info: ^ClientInfo,
 )
 {
     network_writer := shared.network_writer_make()
     defer shared.network_writer_destroy(network_writer)
 
-    shared.network_writer_set_type(&network_writer, .LOGIN)
+    shared.network_writer_set_type(
+        &network_writer,
+        .REGISTER if client_info.new_account else .LOGIN,
+    )
 
     shared.network_writer_push_string(
         &network_writer,
-        login_credentials.username,
+        client_info.login_credentials.username,
     )
     shared.network_writer_push_string(
         &network_writer,
-        login_credentials.password,
+        client_info.login_credentials.password,
     )
 
     packet := shared.network_writer_to_packet(&network_writer)
@@ -102,6 +107,7 @@ send_login_credentials :: proc(
     enet.peer_send(network.peer, NETWORK_SERVER_CHANNEL, packet)
 }
 
+// TODO: change this function's name
 cmd_connect :: proc(
     host: cstring,
     port: u16,
@@ -182,6 +188,7 @@ builtin_command_connect :: proc(
 
         client_info.login_credentials.username = prompt_data.username
         client_info.login_credentials.password = prompt_data.password
+        client_info.new_account = prompt_data.new_account
 
         cmd_connect(
             strings.clone_to_cstring(prompt_data.host),
@@ -200,6 +207,7 @@ builtin_command_connect :: proc(
             monitor: ^Monitor,
             line_input: ^LineInput,
             network: ^Network,
+            prompt: ^Prompt,
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
@@ -217,6 +225,7 @@ builtin_command_connect :: proc(
             monitor: ^Monitor,
             line_input: ^LineInput,
             network: ^Network,
+            prompt: ^Prompt,
         ) -> bool
         {
             port, ok := strconv.parse_uint(input)
@@ -243,6 +252,56 @@ builtin_command_connect :: proc(
         },
     )
 
+    // From here, go to register or login
+    prompt_add_step(
+        &screen.prompt,
+        "[Connect] Please type 'login' or 'register'.",
+        proc(
+            data: rawptr,
+            input: string,
+            monitor: ^Monitor,
+            line_input: ^LineInput,
+            network: ^Network,
+            prompt: ^Prompt,
+        ) -> bool
+        {
+            prompt_data := (^ConnectPromptData)(data)
+
+            if input == "login"
+            {
+                prompt_data.new_account = false
+
+                monitor_append_line(
+                    monitor,
+                    "[Connect] A login attempt will be made.",
+                    raylib.GRAY,
+                )
+            }
+            else if input == "register"
+            {
+                prompt_data.new_account = true
+
+                monitor_append_line(
+                    monitor,
+                    "[Connect] A registration attempt will be made.",
+                    raylib.GRAY,
+                )
+            }
+            else
+            {
+                monitor_append_line(
+                    monitor,
+                    "[Connect] There is no such option.",
+                    raylib.GRAY,
+                )
+
+                prompt.next_step -= 1
+            }
+
+            return true
+        },
+    )
+
     prompt_add_step(
         &screen.prompt,
         "[Connect] Please type your username.",
@@ -252,6 +311,7 @@ builtin_command_connect :: proc(
             monitor: ^Monitor,
             line_input: ^LineInput,
             network: ^Network,
+            prompt: ^Prompt,
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
@@ -280,6 +340,7 @@ builtin_command_connect :: proc(
             monitor: ^Monitor,
             line_input: ^LineInput,
             network: ^Network,
+            prompt: ^Prompt,
         ) -> bool
         {
             prompt_data := (^ConnectPromptData)(data)
@@ -382,7 +443,6 @@ process_input :: proc(
             )
             {
                 prompt_reset(&screen.prompt)
-                screen.prompt.active = false
             }
         }
         else
@@ -445,7 +505,7 @@ network_step :: proc(
                     )
                     send_login_credentials(
                         network,
-                        &client_info.login_credentials,
+                        client_info,
                     )
                 case .DISCONNECT:
                     network.status = .STALLED

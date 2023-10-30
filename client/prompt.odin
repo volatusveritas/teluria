@@ -6,9 +6,16 @@ PromptStep :: #type proc(
     ^Monitor,
     ^LineInput,
     ^Network,
+    ^Prompt,
 ) -> bool
 
-PromptDoneCallback :: #type proc(rawptr, ^Monitor, ^Network, ^ClientInfo)
+PromptDoneCallback :: #type proc(
+    rawptr,
+    ^Monitor,
+    ^Network,
+    ^ClientInfo,
+)
+
 PromptDestroyCallback :: #type proc(rawptr)
 
 Prompt :: struct
@@ -44,6 +51,8 @@ prompt_reset :: proc(prompt: ^Prompt)
 
     clear(&prompt.messages)
     clear(&prompt.steps)
+
+    prompt.active = false
 }
 
 prompt_destroy :: proc(prompt: Prompt)
@@ -89,6 +98,7 @@ prompt_process_step :: proc(
         monitor,
         line_input,
         network,
+        prompt,
     )
 
     delete(input)
