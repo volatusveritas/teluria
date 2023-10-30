@@ -1,21 +1,22 @@
 package client
 
 import "core:fmt"
+import "core:log"
+import "core:mem"
 import "core:strconv"
 import "core:strings"
-import "core:mem"
-
-when !#config(DEBUG, false)
-{
-    // Abusing a compiler bug to solve a design issue; no one will convince me
-    // of the opposite.
-    _ :: mem
-}
 
 import "vendor:raylib"
 import enet "vendor:ENet"
 
 import "../shared"
+
+when !#config(TR_ALLOC, false)
+{
+    // Abusing a compiler bug to solve a design issue; no one will convince me
+    // of the opposite.
+    _ :: mem
+}
 
 SCREEN_WIDTH  : i32 : 1138
 SCREEN_HEIGHT : i32 : 640
@@ -58,6 +59,49 @@ Screen :: struct
     prompt: Prompt,
 }
 
+LoginCredentials :: struct
+{
+    username: string,
+    password: string,
+}
+
+ClientInfo :: struct
+{
+    login_credentials: LoginCredentials,
+}
+
+ConnectPromptData :: struct
+{
+    host: string,
+    port: u16,
+    username: string,
+    password: string,
+}
+
+send_login_credentials :: proc(
+    network: ^Network,
+    login_credentials: ^LoginCredentials,
+)
+{
+    network_writer := shared.network_writer_make()
+    defer shared.network_writer_destroy(network_writer)
+
+    shared.network_writer_set_type(&network_writer, .LOGIN)
+
+    shared.network_writer_push_string(
+        &network_writer,
+        login_credentials.username,
+    )
+    shared.network_writer_push_string(
+        &network_writer,
+        login_credentials.password,
+    )
+
+    packet := shared.network_writer_to_packet(&network_writer)
+    // TODO: there may be an error here
+    enet.peer_send(network.peer, NETWORK_SERVER_CHANNEL, packet)
+}
+
 cmd_connect :: proc(
     host: cstring,
     port: u16,
@@ -68,6 +112,18 @@ cmd_connect :: proc(
     monitor_append_line(monitor, "Connecting...")
 
     peer, err := net_client_connect(network.client, host, port)
+
+    switch err
+    {
+        case .SUCCESS:
+            // Nothing should be done here
+        case .RESOLVE_HOST:
+            log.error("Failed to resolve the host.")
+            return
+        case .ATTEMPT_CONNECTION:
+            log.error("Failed to attempt connection")
+            return
+    }
 
     delete(host)
 
@@ -93,18 +149,11 @@ cmd_connect :: proc(
     }
 }
 
-ConnectPromptData :: struct
-{
-    host: string,
-    port: u16,
-    username: string,
-    password: string,
-}
-
 builtin_command_connect :: proc(
     cmd: ^shared.Command,
     screen: ^Screen,
     network: ^Network,
+    client_info: ^ClientInfo,
 )
 {
     data := new(ConnectPromptData)
@@ -126,9 +175,13 @@ builtin_command_connect :: proc(
         data: rawptr,
         monitor: ^Monitor,
         network: ^Network,
+        client_info: ^ClientInfo,
     )
     {
         prompt_data := (^ConnectPromptData)(data)
+
+        client_info.login_credentials.username = prompt_data.username
+        client_info.login_credentials.password = prompt_data.password
 
         cmd_connect(
             strings.clone_to_cstring(prompt_data.host),
@@ -255,7 +308,11 @@ builtin_command_disconnect :: proc(
     monitor_append_line(monitor, "Disconnecting...")
 }
 
-handle_command :: proc(screen: ^Screen, network: ^Network)
+handle_command :: proc(
+    screen: ^Screen,
+    network: ^Network,
+    client_info: ^ClientInfo,
+)
 {
     strings.pop_rune(&screen.line_input.text)
     command := shared.command_make(strings.to_string(screen.line_input.text))
@@ -263,7 +320,7 @@ handle_command :: proc(screen: ^Screen, network: ^Network)
     switch shared.command_get_next(&command)
     {
         case "connect":
-            builtin_command_connect(&command, screen, network)
+            builtin_command_connect(&command, screen, network, client_info)
         case "disconnect":
             builtin_command_disconnect(&command, &screen.monitor, network)
         case "exit":
@@ -306,6 +363,7 @@ process_input :: proc(
     screen: ^Screen,
     fonts: ^Fonts,
     sound_engine: ^SoundEngine,
+    client_info: ^ClientInfo,
 )
 {
     if raylib.IsKeyPressed(raylib.KeyboardKey.ENTER)
@@ -320,6 +378,7 @@ process_input :: proc(
                 &screen.monitor,
                 &screen.line_input,
                 network,
+                client_info,
             )
             {
                 prompt_reset(&screen.prompt)
@@ -328,7 +387,7 @@ process_input :: proc(
         }
         else
         {
-            handle_command(screen, network)
+            handle_command(screen, network, client_info)
         }
 
         line_input_reset(&screen.line_input)
@@ -339,7 +398,11 @@ process_input :: proc(
     }
 }
 
-network_step :: proc(network: ^Network, screen: ^Screen)
+network_step :: proc(
+    network: ^Network,
+    screen: ^Screen,
+    client_info: ^ClientInfo,
+)
 {
     if network.status == .CONNECTING
     {
@@ -380,6 +443,10 @@ network_step :: proc(network: ^Network, screen: ^Screen)
                         "Successfully connected.",
                         COLOR_MSG_SUCCESS,
                     )
+                    send_login_credentials(
+                        network,
+                        &client_info.login_credentials,
+                    )
                 case .DISCONNECT:
                     network.status = .STALLED
                     monitor_append_line(
@@ -396,7 +463,13 @@ network_step :: proc(network: ^Network, screen: ^Screen)
 
 main :: proc()
 {
-    when #config(DEBUG, false)
+    context.logger = log.create_console_logger(
+        opt=log.Options{.Level} | log.Full_Timestamp_Opts,
+    )
+
+    log.destroy_console_logger(context.logger)
+
+    when ODIN_DEBUG
     {
         track: mem.Tracking_Allocator = {}
         mem.tracking_allocator_init(&track, context.allocator)
@@ -523,10 +596,14 @@ main :: proc()
 
     defer network_destroy(&network)
 
+    client_info := ClientInfo {
+        login_credentials = {},
+    }
+
     for !raylib.WindowShouldClose() && !screen.should_exit
     {
-        network_step(&network, &screen)
-        process_input(&network, &screen, &fonts, &sound_engine)
+        network_step(&network, &screen, &client_info)
+        process_input(&network, &screen, &fonts, &sound_engine, &client_info)
         draw_step(screen, fonts)
     }
 }

@@ -8,7 +8,7 @@ PromptStep :: #type proc(
     ^Network,
 ) -> bool
 
-PromptDoneCallback :: #type proc(rawptr, ^Monitor, ^Network)
+PromptDoneCallback :: #type proc(rawptr, ^Monitor, ^Network, ^ClientInfo)
 PromptDestroyCallback :: #type proc(rawptr)
 
 Prompt :: struct
@@ -80,6 +80,7 @@ prompt_process_step :: proc(
     monitor: ^Monitor,
     line_input: ^LineInput,
     network: ^Network,
+    client_info: ^ClientInfo,
 ) -> bool
 {
     result := prompt.steps[prompt.next_step](
@@ -94,7 +95,7 @@ prompt_process_step :: proc(
 
     if prompt.next_step == len(prompt.steps) - 1
     {
-        prompt.done_callback(prompt.data, monitor, network)
+        prompt.done_callback(prompt.data, monitor, network, client_info)
         return false
     }
     else if result
