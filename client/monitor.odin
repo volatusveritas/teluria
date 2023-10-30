@@ -57,6 +57,7 @@ monitor_append_allocated_line :: proc(
 )
 {
     append(&monitor.allocated_lines, line)
+    append(&monitor.lines, line)
     append(&monitor.colors, color)
 }
 
