@@ -1,7 +1,5 @@
 package shared
 
-import "core:slice"
-
 import enet "vendor:ENet"
 
 MESSAGE_MAX_SIZE :: 4096
@@ -38,6 +36,17 @@ network_writer_get_next :: proc(network_writer: ^NetworkWriter) -> []byte
     return network_writer.buffer[network_writer.offset:]
 }
 
+network_writer_set_type :: proc(
+    network_writer: ^NetworkWriter,
+    type: NetworkMessageType,
+)
+{
+    writer_data_ptr := raw_data(network_writer_get_next(network_writer))
+    (^NetworkMessageType)(writer_data_ptr)^ = type
+
+    network_writer.offset += size_of(NetworkMessageType)
+}
+
 @(private="file")
 network_writer_push_string_length :: proc(
     network_writer: ^NetworkWriter,
@@ -71,7 +80,7 @@ network_writer_push_string :: proc(
 }
 
 network_writer_to_packet :: proc(
-    network_writer: ^NetworkWriter
+    network_writer: ^NetworkWriter,
 ) -> ^enet.Packet
 {
     return enet.packet_create(
