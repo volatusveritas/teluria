@@ -14,6 +14,7 @@ NetworkErr :: enum
 
 network_initialize :: proc(
     address: cstring,
+    port: u16,
     peer_count: uint,
     channel_limit: uint,
     incoming_bandwidth: u32,
@@ -34,6 +35,7 @@ network_initialize :: proc(
     }
 
     address := enet.Address{}
+    address.port = port
 
     if enet.address_set_host(&address, HOST_ADDRESS) != 0
     {
