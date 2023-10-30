@@ -1,8 +1,8 @@
 package shared
 
-import "core:fmt"
 import "core:slice"
 import "core:strings"
+import "core:log"
 
 import enet "vendor:ENet"
 
@@ -33,6 +33,28 @@ network_reader_get_next :: proc(network_reader: ^NetworkReader) -> []byte
     return network_reader.data[network_reader.offset:]
 }
 
+network_reader_get_type :: proc(
+    network_reader: ^NetworkReader,
+) -> (NetworkMessageType, NetworkReaderErr)
+{
+    if (
+        network_reader.offset + size_of(NetworkMessageType)
+        > len(network_reader.data)
+    )
+    {
+        log.error("Not enough data to extract the message's type.")
+        return nil, .MissingData
+    }
+
+    type := (^NetworkMessageType)(
+        raw_data(network_reader_get_next(network_reader)),
+    )^
+
+    network_reader.offset += size_of(NetworkMessageType)
+
+    return type, .None
+}
+
 @(private="file")
 network_reader_read_string_length :: proc(
     network_reader: ^NetworkReader,
@@ -47,7 +69,7 @@ network_reader_read_string_length :: proc(
     }
 
     length := (^StringLengthType)(
-        raw_data(network_reader_get_next(network_reader))
+        raw_data(network_reader_get_next(network_reader)),
     )^
 
     network_reader.offset += size_of(StringLengthType)
