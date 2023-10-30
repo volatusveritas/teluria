@@ -1,9 +1,19 @@
 package server
 
+import "core:fmt"
+import "core:mem"
 import "core:log"
 
 import enet "vendor:ENet"
 import lua "vendor:lua/5.4"
+
+import "../shared"
+
+when !#config(TR_ALLOC, false)
+{
+    _ :: fmt
+    _ :: mem
+}
 
 HOST_POLL_TIMEOUT :: 200
 HOST_ADDRESS :: "127.0.0.1"
@@ -15,6 +25,43 @@ HOST_OUTBOUND_BANDWIDTH :: 0
 
 handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
 {
+    network_reader := shared.network_reader_make(event.packet)
+
+    type, type_err := shared.network_reader_get_type(&network_reader)
+
+    if type_err != .None
+    {
+        return
+    }
+
+    #partial switch type
+    {
+        case .LOGIN:
+            username, u_err := shared.network_reader_read_string(
+                &network_reader,
+            )
+            
+            if u_err != .None
+            {
+                return
+            }
+
+            password, p_err := shared.network_reader_read_string(
+                &network_reader,
+            )
+
+            if p_err != .None
+            {
+                return
+            }
+
+            log.infof(
+                "Login packet with username '%v' and password '%v'.",
+                username,
+                password,
+            )
+    }
+
     teluria_call_custom_command(lua_state, cstring(event.packet.data))
 
     enet.packet_destroy(event.packet)
@@ -22,16 +69,68 @@ handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
 
 main :: proc()
 {
-    console_logger := log.create_console_logger(
+    context.logger = log.create_console_logger(
         opt=log.Options{.Level} | log.Full_Timestamp_Opts,
     )
 
-    defer log.destroy_console_logger(console_logger)
+    defer log.destroy_console_logger(context.logger)
 
-    context.logger = console_logger
+    when ODIN_DEBUG
+    {
+        track: mem.Tracking_Allocator = {}
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
+
+        defer {
+            memory_mistakes: bool = false
+
+            fmt.println("\n    Tracking allocator status report\n")
+
+            if len(track.allocation_map) > 0
+            {
+                memory_mistakes = true
+
+                fmt.eprintf(
+                    "=== %v allocations not freed: ===\n",
+                    len(track.allocation_map),
+                )
+
+                for _, entry in track.allocation_map
+                {
+                    fmt.eprintf(
+                        "- %v bytes @ %v\n",
+                        entry.size,
+                        entry.location,
+                    )
+                }
+            }
+
+            if len(track.bad_free_array) > 0
+            {
+                memory_mistakes = true
+
+                fmt.eprintf(
+                    "=== %v incorrect frees: ===\n",
+                    len(track.bad_free_array),
+                )
+
+                for entry in track.bad_free_array
+                {
+                    fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+                }
+            }
+
+            mem.tracking_allocator_destroy(&track)
+
+            if !memory_mistakes {
+                fmt.printf("=== No memory mistakes found. ===")
+            }
+        }
+    }
 
     host, network_err := network_initialize(
         HOST_ADDRESS,
+        HOST_PORT,
         HOST_PEER_COUNT,
         HOST_CHANNELS,
         HOST_INBOUND_BANDWIDTH,
