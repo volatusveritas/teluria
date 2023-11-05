@@ -31,6 +31,11 @@ network_writer_destroy :: proc(network_writer: NetworkWriter)
     delete(network_writer.buffer)
 }
 
+network_writer_reset :: proc(network_writer: ^NetworkWriter)
+{
+    network_writer.offset = 0
+}
+
 network_writer_get_next :: proc(network_writer: ^NetworkWriter) -> []byte
 {
     return network_writer.buffer[network_writer.offset:]
@@ -77,6 +82,14 @@ network_writer_push_string :: proc(
     network_writer.offset += len(str)
 
     return .None
+}
+
+network_writer_push_cstring :: proc(
+    network_writer: ^NetworkWriter,
+    str: cstring,
+) -> NetworkWriterErr
+{
+    return network_writer_push_string(network_writer, string(str))
 }
 
 network_writer_to_packet :: proc(

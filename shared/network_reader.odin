@@ -18,14 +18,13 @@ NetworkReader :: struct
     offset: uint,
 }
 
-network_reader_make :: proc(packet: ^enet.Packet) -> NetworkReader
+network_reader_load_packet ::proc(
+    network_reader: ^NetworkReader,
+    packet: ^enet.Packet,
+)
 {
-    reader_data := slice.from_ptr(packet.data, int(packet.dataLength))
-
-    return NetworkReader {
-        data = reader_data,
-        offset = 0,
-    }
+    network_reader.data = slice.from_ptr(packet.data, int(packet.dataLength))
+    network_reader.offset = 0
 }
 
 network_reader_get_next :: proc(network_reader: ^NetworkReader) -> []byte
