@@ -23,9 +23,27 @@ HOST_CHANNELS :: 2
 HOST_INBOUND_BANDWIDTH :: 0
 HOST_OUTBOUND_BANDWIDTH :: 0
 
+ServerInfo :: struct
+{
+    user_credentials: map[string]string,
+}
+
+server_info_make :: proc() -> ServerInfo
+{
+    return ServerInfo {
+        user_credentials = make(map[string]string),
+    }
+}
+
+server_info_destroy :: proc(server_info: ^ServerInfo)
+{
+    delete(server_info.user_credentials)
+}
+
 handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
 {
-    network_reader := shared.network_reader_make(event.packet)
+    network_reader := shared.NetworkReader {}
+    shared.network_reader_load_packet(&network_reader, event.packet)
 
     type, type_err := shared.network_reader_get_type(&network_reader)
 
@@ -138,6 +156,9 @@ main :: proc()
             }
         }
     }
+
+    server_info := server_info_make()
+    defer server_info_destroy(&server_info)
 
     host, network_err := network_initialize(
         HOST_ADDRESS,
