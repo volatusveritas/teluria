@@ -1,6 +1,6 @@
 .PHONY: build-client build-server build-all \
 	debug-client debug-server debug-all \
-	check-client check-server check-all \
+	check-client check-server check-shared check-all \
 	release-client release-server release-all \
 	run-client run-server
 
@@ -39,7 +39,21 @@ check-client:
 check-server:
 	odin check server $(GOPTIONS) $(DOPTIONS)
 
-check-all: check-client check-server
+check-shared:
+	odin check shared $(GOPTIONS) $(DOPTIONS)
+
+check-all: check-client check-server check-shared
+
+test-client:
+	odin test client -out:build/client_tests.exe $(GOPTIONS) $(DOPTIONS)
+
+test-server:
+	odin test server -out:build/server_tests.exe $(GOPTIONS) $(DOPTIONS)
+
+test-shared:
+	odin test shared -out:build/shared_tests.exe $(GOPTIONS) $(DOPTIONS)
+
+test-all: test-client test-server test-shared
 
 run-client:
 	odin run client -out:build/client.exe $(GOPTIONS) $(DOPTIONS) $(TR_ALLOC)
