@@ -85,24 +85,23 @@ send_login_credentials :: proc(
     client_info: ^ClientInfo,
 )
 {
-    network_writer := shared.network_writer_make()
-    defer shared.network_writer_destroy(network_writer)
+    shared.network_writer_reset(&network.writer)
 
     shared.network_writer_set_type(
-        &network_writer,
+        &network.writer,
         .REGISTER if client_info.new_account else .LOGIN,
     )
 
     shared.network_writer_push_string(
-        &network_writer,
+        &network.writer,
         client_info.login_credentials.username,
     )
     shared.network_writer_push_string(
-        &network_writer,
+        &network.writer,
         client_info.login_credentials.password,
     )
 
-    packet := shared.network_writer_to_packet(&network_writer)
+    packet := shared.network_writer_to_packet(&network.writer)
     // TODO: there may be an error here
     enet.peer_send(network.peer, NETWORK_SERVER_CHANNEL, packet)
 }
@@ -252,7 +251,6 @@ builtin_command_connect :: proc(
         },
     )
 
-    // From here, go to register or login
     prompt_add_step(
         &screen.prompt,
         "[Connect] Please type 'login' or 'register'.",
@@ -427,7 +425,9 @@ process_input :: proc(
     client_info: ^ClientInfo,
 )
 {
-    if raylib.IsKeyPressed(raylib.KeyboardKey.ENTER)
+    input_length := strings.builder_len(screen.line_input.text)
+
+    if raylib.IsKeyPressed(raylib.KeyboardKey.ENTER) && input_length > 1
     {
         if screen.prompt.active
         {
@@ -481,43 +481,76 @@ network_step :: proc(
         }
     }
 
-    switch network_poll(network)
+    network_status := network_poll(network)
+
+    if network_status != .EVENT
     {
-        case .NO_EVENT:
-            // Nothing should be done in this case
-        case .FAILURE:
+        if network_status == .FAILURE
+        {
             monitor_append_line(
                 &screen.monitor,
                 "An error ocurred while trying to poll events.",
                 COLOR_MSG_ERR,
             )
-        case .EVENT:
-            switch network.event.type
-            {
-                case .NONE:
-                    // Nothing should be done in this case
-                case .CONNECT:
-                    network.status = .CONNECTED
-                    monitor_append_line(
-                        &screen.monitor,
-                        "Successfully connected.",
-                        COLOR_MSG_SUCCESS,
-                    )
-                    send_login_credentials(
-                        network,
-                        client_info,
-                    )
-                case .DISCONNECT:
-                    network.status = .STALLED
-                    monitor_append_line(
-                        &screen.monitor,
-                        "Disconnected from the server.",
-                    )
-                case .RECEIVE:
-                    // TODO: handle packet
+        }
 
-                    enet.packet_destroy(network.event.packet)
+        return
+    }
+
+    switch network.event.type
+    {
+        case .NONE:
+            // Nothing should be done in this case
+        case .CONNECT:
+            network.status = .CONNECTED
+
+            monitor_append_line(
+                &screen.monitor,
+                "Successfully connected.",
+                COLOR_MSG_SUCCESS,
+            )
+
+            send_login_credentials(
+                network,
+                client_info,
+            )
+        case .DISCONNECT:
+            network.status = .STALLED
+
+            monitor_append_line(
+                &screen.monitor,
+                "Disconnected from the server.",
+            )
+        case .RECEIVE:
+            log.info("Event captured: RECEIVE")
+
+            shared.network_reader_load_packet(
+                &network.reader,
+                network.event.packet,
+            )
+
+            type, type_err := shared.network_reader_get_type(&network.reader)
+
+            if type_err != .None || type != .MESSAGE
+            {
+                return
             }
+
+            message, message_err := shared.network_reader_read_string(
+                &network.reader,
+            )
+
+            if message_err != .None
+            {
+                return
+            }
+
+            monitor_append_allocated_line(
+                &screen.monitor,
+                strings.clone_to_cstring(message),
+            )
+
+            enet.packet_destroy(network.event.packet)
     }
 }
 
@@ -527,7 +560,7 @@ main :: proc()
         opt=log.Options{.Level} | log.Full_Timestamp_Opts,
     )
 
-    log.destroy_console_logger(context.logger)
+    defer log.destroy_console_logger(context.logger)
 
     when ODIN_DEBUG
     {
