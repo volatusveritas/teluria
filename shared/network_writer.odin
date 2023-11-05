@@ -100,6 +100,6 @@ network_writer_to_packet :: proc(
         raw_data(network_writer.buffer),
         network_writer.offset,
         // TODO: make this ".REALIBLE" a parameter
-        .RELIABLE | .NO_ALLOCATE,
+        .RELIABLE,
     )
 }
