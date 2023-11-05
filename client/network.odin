@@ -2,6 +2,8 @@ package client
 
 import enet "vendor:ENet"
 
+import "../shared"
+
 NETWORK_SERVER_CHANNEL : u8 : 0
 CONNECTION_PEERS : uint : 1
 CONNECTION_CHANNELS : uint : 2
@@ -36,6 +38,8 @@ Network :: struct
     event: enet.Event,
     peer: ^enet.Peer,
     status: NetworkStatus,
+    writer: shared.NetworkWriter,
+    reader: shared.NetworkReader,
 }
 
 network_make :: proc() -> (Network, NetworkErr)
@@ -65,6 +69,8 @@ network_make :: proc() -> (Network, NetworkErr)
         event = {},
         peer = nil,
         status = .STALLED,
+        writer = shared.network_writer_make(),
+        reader = {},
     }
 
     return network, .NONE
@@ -74,6 +80,8 @@ network_destroy :: proc(network: ^Network)
 {
     enet.deinitialize()
     enet.host_destroy(network.client)
+
+    shared.network_writer_destroy(network.writer)
 }
 
 network_poll :: proc(network: ^Network) -> NetworkPollErr
