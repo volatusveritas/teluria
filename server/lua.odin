@@ -2,9 +2,12 @@ package server
 
 import "core:fmt"
 import "core:log"
+import "core:runtime"
 
 import lua "vendor:lua/5.4"
 import enet "vendor:ENet"
+
+import "../shared"
 
 lua_engine_initialize :: proc() -> ^lua.State
 {
@@ -77,9 +80,19 @@ teluria_core_get_event :: proc "c" (state: ^lua.State) -> ^enet.Event
 @(private="file")
 teluria_builtin_broadcast :: proc "c" (state: ^lua.State) -> i32
 {
+    context = runtime.default_context()
+
     host := teluria_core_get_host(state)
     message := lua.L_checkstring(state, 1)
-    packet := enet.packet_create(rawptr(message), len(message), .RELIABLE)
+
+    network_writer := shared.network_writer_make()
+    defer shared.network_writer_destroy(network_writer)
+
+    shared.network_writer_set_type(&network_writer, .MESSAGE)
+    shared.network_writer_push_cstring(&network_writer, message)
+
+    packet := shared.network_writer_to_packet(&network_writer)
+    assert(packet.dataLength == 4 + 4 + len(message))
 
     enet.host_broadcast(host, 0, packet)
 
@@ -89,6 +102,8 @@ teluria_builtin_broadcast :: proc "c" (state: ^lua.State) -> i32
 @(private="file")
 teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
 {
+    context = runtime.default_context()
+
     peer_id := u32(lua.L_checkinteger(state, 1))
     message := lua.L_checkstring(state, 2)
     host := teluria_core_get_host(state)
@@ -97,11 +112,13 @@ teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
     {
         if host.peers[i].connectID == peer_id
         {
-            packet := enet.packet_create(
-                rawptr(message),
-                len(message),
-                .RELIABLE,
-            )
+            network_writer := shared.network_writer_make()
+            defer shared.network_writer_destroy(network_writer)
+
+            shared.network_writer_set_type(&network_writer, .MESSAGE)
+            shared.network_writer_push_cstring(&network_writer, message)
+
+            packet := shared.network_writer_to_packet(&network_writer)
 
             // TODO: handle errors here
             enet.peer_send(&host.peers[i], 0, packet)
