@@ -10,6 +10,7 @@ import "vendor:raylib"
 import enet "vendor:ENet"
 
 import "../shared"
+import "../data_stream"
 
 when !#config(TR_ALLOC, false)
 {
@@ -85,23 +86,25 @@ send_login_credentials :: proc(
     client_info: ^ClientInfo,
 )
 {
-    shared.network_writer_reset(&network.writer)
+    data_stream.reset(&network.stream)
 
-    shared.network_writer_set_type(
-        &network.writer,
+    data_stream.insert_message_type(
+        &network.stream,
         .REGISTER if client_info.new_account else .LOGIN,
     )
 
-    shared.network_writer_push_string(
-        &network.writer,
+    data_stream.insert_string(
+        &network.stream,
         client_info.login_credentials.username,
     )
-    shared.network_writer_push_string(
-        &network.writer,
+
+    data_stream.insert_string(
+        &network.stream,
         client_info.login_credentials.password,
     )
 
-    packet := shared.network_writer_to_packet(&network.writer)
+    packet := data_stream.to_packet(&network.stream)
+
     // TODO: there may be an error here
     enet.peer_send(network.peer, NETWORK_SERVER_CHANNEL, packet)
 }
@@ -524,21 +527,16 @@ network_step :: proc(
         case .RECEIVE:
             log.info("Event captured: RECEIVE")
 
-            shared.network_reader_load_packet(
-                &network.reader,
-                network.event.packet,
-            )
+            data_stream.read_packet(&network.stream, network.event.packet)
 
-            type, type_err := shared.network_reader_get_type(&network.reader)
+            type, type_err := data_stream.extract_message_type(&network.stream)
 
             if type_err != .None || type != .MESSAGE
             {
                 return
             }
 
-            message, message_err := shared.network_reader_read_string(
-                &network.reader,
-            )
+            message, message_err := data_stream.extract_string(&network.stream)
 
             if message_err != .None
             {
@@ -685,6 +683,8 @@ main :: proc()
         case .CREATE_HOST:
             fmt.println("Failed to create host.")
             return
+        case .ALLOCATE_STREAM:
+            fmt.println("Failed to allocate the data stream.")
     }
 
     defer network_destroy(&network)

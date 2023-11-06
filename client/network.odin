@@ -2,7 +2,7 @@ package client
 
 import enet "vendor:ENet"
 
-import "../shared"
+import "../data_stream"
 
 NETWORK_SERVER_CHANNEL : u8 : 0
 CONNECTION_PEERS : uint : 1
@@ -15,6 +15,7 @@ NetworkErr :: enum
     NONE,
     INITIALIZE,
     CREATE_HOST,
+    ALLOCATE_STREAM,
 }
 
 NetworkPollErr :: enum
@@ -38,16 +39,13 @@ Network :: struct
     event: enet.Event,
     peer: ^enet.Peer,
     status: NetworkStatus,
-    writer: shared.NetworkWriter,
-    reader: shared.NetworkReader,
+    stream: data_stream.Stream,
 }
 
-network_make :: proc() -> (Network, NetworkErr)
 network_make :: proc() -> (network: Network, err: NetworkErr)
 {
     if enet.initialize() < 0
     {
-        return {}, .FAILED_TO_INITIALIZE
         return {}, .INITIALIZE
     }
 
@@ -66,20 +64,30 @@ network_make :: proc() -> (network: Network, err: NetworkErr)
 
     if host == nil
     {
-        enet.deinitialize()
-        return {}, .FAILED_TO_CREATE_HOST
         err = .CREATE_HOST
         return
     }
 
-    network := Network {
+    defer if err != .NONE
+    {
+        enet.host_destroy(host)
+    }
+
+    stream, stream_err := data_stream.create()
+
+    if stream_err != .None
+    {
+        err = .ALLOCATE_STREAM
+        return
+    }
+
+    network = Network {
         client = host,
         connection_time = 0.0,
         event = {},
         peer = nil,
         status = .STALLED,
-        writer = shared.network_writer_make(),
-        reader = {},
+        stream = stream,
     }
 
     return network, .NONE
@@ -90,7 +98,7 @@ network_destroy :: proc(network: ^Network)
     enet.deinitialize()
     enet.host_destroy(network.client)
 
-    shared.network_writer_destroy(network.writer)
+    data_stream.destroy(&network.stream)
 }
 
 network_poll :: proc(network: ^Network) -> NetworkPollErr

@@ -7,7 +7,7 @@ import "core:log"
 import enet "vendor:ENet"
 import lua "vendor:lua/5.4"
 
-import "../shared"
+import "../data_stream"
 
 when !#config(TR_ALLOC, false)
 {
@@ -40,12 +40,15 @@ server_info_destroy :: proc(server_info: ^ServerInfo)
     delete(server_info.user_credentials)
 }
 
-handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
+handle_packet :: proc(
+    event: enet.Event,
+    lua_state: ^lua.State,
+    stream: ^data_stream.Stream,
+)
 {
-    network_reader := shared.NetworkReader {}
-    shared.network_reader_load_packet(&network_reader, event.packet)
+    data_stream.read_packet(stream, event.packet)
 
-    type, type_err := shared.network_reader_get_type(&network_reader)
+    type, type_err := data_stream.extract_message_type(stream)
 
     if type_err != .None
     {
@@ -55,18 +58,14 @@ handle_packet :: proc(event: enet.Event, lua_state: ^lua.State)
     #partial switch type
     {
         case .LOGIN, .REGISTER:
-            username, u_err := shared.network_reader_read_string(
-                &network_reader,
-            )
+            username, u_err := data_stream.extract_string(stream)
             
             if u_err != .None
             {
                 return
             }
 
-            password, p_err := shared.network_reader_read_string(
-                &network_reader,
-            )
+            password, p_err := data_stream.extract_string(stream)
 
             if p_err != .None
             {
@@ -176,10 +175,19 @@ main :: proc()
 
     defer network_deinitialize(host)
 
+    stream, stream_err := data_stream.create()
+
+    if stream_err != .None
+    {
+        return
+    }
+
+    defer data_stream.destroy(&stream)
+
     lua_state := lua_engine_initialize()
     defer lua_engine_deinitialize(lua_state)
 
-    lua_engine_setup_registry(lua_state, host)
+    lua_engine_setup_registry(lua_state, host, &stream)
     lua_engine_expose_builtin_api(lua_state)
     lua_engine_load_server(lua_state)
 
@@ -207,7 +215,7 @@ main :: proc()
                 teluria_callback_on_disconnect(lua_state, event.peer.connectID)
             case .RECEIVE:
                 log.info("Event captured: RECEIVE")
-                handle_packet(event, lua_state)
+                handle_packet(event, lua_state, &stream)
         }
     }
 }

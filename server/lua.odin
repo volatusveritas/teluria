@@ -7,7 +7,7 @@ import "core:runtime"
 import lua "vendor:lua/5.4"
 import enet "vendor:ENet"
 
-import "../shared"
+import "../data_stream"
 
 lua_engine_initialize :: proc() -> ^lua.State
 {
@@ -47,12 +47,16 @@ lua_engine_load_server :: proc(state: ^lua.State)
 lua_engine_setup_registry :: proc(
     state: ^lua.State,
     host: ^enet.Host,
+    stream: ^data_stream.Stream,
 )
 {
     log.info("Setting up the Lua registry...")
 
     lua.pushinteger(state, lua.Integer(uintptr(host)))
     lua.setfield(state, lua.REGISTRYINDEX, "host")
+
+    lua.pushinteger(state, lua.Integer(uintptr(host)))
+    lua.setfield(state, lua.REGISTRYINDEX, "stream")
 
     log.info("Lua registry ready.")
 }
@@ -62,6 +66,21 @@ teluria_core_get_host :: proc "c" (state: ^lua.State) -> ^enet.Host
 {
     lua.getfield(state, lua.REGISTRYINDEX, "host")
     host := (^enet.Host)(uintptr(lua.tointeger(state, lua.gettop(state))))
+    lua.pop(state, 1)
+
+    return host
+}
+
+@(private="file")
+teluria_core_get_stream :: proc "c" (state: ^lua.State) -> ^data_stream.Stream
+{
+    lua.getfield(state, lua.REGISTRYINDEX, "stream")
+
+    // TODO: break this into more lines for readability
+    host := (^data_stream.Stream)(
+        uintptr(lua.tointeger(state, lua.gettop(state))),
+    )
+
     lua.pop(state, 1)
 
     return host
@@ -83,16 +102,15 @@ teluria_builtin_broadcast :: proc "c" (state: ^lua.State) -> i32
     context = runtime.default_context()
 
     host := teluria_core_get_host(state)
+    stream := teluria_core_get_stream(state)
     message := lua.L_checkstring(state, 1)
 
-    network_writer := shared.network_writer_make()
-    defer shared.network_writer_destroy(network_writer)
+    data_stream.reset(stream)
 
-    shared.network_writer_set_type(&network_writer, .MESSAGE)
-    shared.network_writer_push_cstring(&network_writer, message)
+    data_stream.insert_message_type(stream, .MESSAGE)
+    data_stream.insert_cstring(stream, message)
 
-    packet := shared.network_writer_to_packet(&network_writer)
-    assert(packet.dataLength == 4 + 4 + len(message))
+    packet := data_stream.to_packet(stream)
 
     enet.host_broadcast(host, 0, packet)
 
@@ -107,18 +125,18 @@ teluria_builtin_send :: proc "c" (state: ^lua.State) -> i32
     peer_id := u32(lua.L_checkinteger(state, 1))
     message := lua.L_checkstring(state, 2)
     host := teluria_core_get_host(state)
+    stream := teluria_core_get_stream(state)
 
     for i: uint = 0; i < host.peerCount; i += 1
     {
         if host.peers[i].connectID == peer_id
         {
-            network_writer := shared.network_writer_make()
-            defer shared.network_writer_destroy(network_writer)
+            data_stream.reset(stream)
 
-            shared.network_writer_set_type(&network_writer, .MESSAGE)
-            shared.network_writer_push_cstring(&network_writer, message)
+            data_stream.insert_message_type(stream, .MESSAGE)
+            data_stream.insert_cstring(stream, message)
 
-            packet := shared.network_writer_to_packet(&network_writer)
+            packet := data_stream.to_packet(stream)
 
             // TODO: handle errors here
             enet.peer_send(&host.peers[i], 0, packet)
