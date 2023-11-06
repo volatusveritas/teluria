@@ -13,8 +13,8 @@ CONNECTION_BANDWIDTH_OUT : u32 = 0
 NetworkErr :: enum
 {
     NONE,
-    FAILED_TO_INITIALIZE,
-    FAILED_TO_CREATE_HOST,
+    INITIALIZE,
+    CREATE_HOST,
 }
 
 NetworkPollErr :: enum
@@ -43,10 +43,17 @@ Network :: struct
 }
 
 network_make :: proc() -> (Network, NetworkErr)
+network_make :: proc() -> (network: Network, err: NetworkErr)
 {
     if enet.initialize() < 0
     {
         return {}, .FAILED_TO_INITIALIZE
+        return {}, .INITIALIZE
+    }
+
+    defer if err != .NONE
+    {
+        enet.deinitialize()
     }
 
     host := enet.host_create(
@@ -61,6 +68,8 @@ network_make :: proc() -> (Network, NetworkErr)
     {
         enet.deinitialize()
         return {}, .FAILED_TO_CREATE_HOST
+        err = .CREATE_HOST
+        return
     }
 
     network := Network {

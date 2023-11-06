@@ -679,10 +679,10 @@ main :: proc()
     {
         case .NONE:
             // Nothing should be done
-        case .FAILED_TO_INITIALIZE:
+        case .INITIALIZE:
             fmt.println("Failed to initialize the Network module.")
             return
-        case .FAILED_TO_CREATE_HOST:
+        case .CREATE_HOST:
             fmt.println("Failed to create host.")
             return
     }
