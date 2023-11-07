@@ -55,7 +55,7 @@ lua_engine_setup_registry :: proc(
     lua.pushinteger(state, lua.Integer(uintptr(host)))
     lua.setfield(state, lua.REGISTRYINDEX, "host")
 
-    lua.pushinteger(state, lua.Integer(uintptr(host)))
+    lua.pushinteger(state, lua.Integer(uintptr(stream)))
     lua.setfield(state, lua.REGISTRYINDEX, "stream")
 
     log.info("Lua registry ready.")
