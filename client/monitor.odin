@@ -1,6 +1,7 @@
 package client
 
 import "vendor:raylib"
+import "core:fmt"
 
 MONITOR_HEIGHT : i32 : SCREEN_HEIGHT - 3 * PADDING - LINE_INPUT_HEIGHT
 MONITOR_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
@@ -9,6 +10,7 @@ MONITOR_Y      : i32 : PADDING
 MONITOR_ROUND  : f32 : 16.0
 MONITOR_RADIUS : f32 : MONITOR_ROUND / f32(MONITOR_HEIGHT)
 MONITOR_SEGS   : i32 : 16
+MONITOR_LINES  : int : int(MONITOR_HEIGHT / FONT_SIZE)
 
 Monitor :: struct
 {
@@ -75,14 +77,16 @@ monitor_draw :: proc(monitor: Monitor, font: raylib.Font)
         COLOR_TEXTBOX,
     )
 
-    for i in 0..<len(monitor.lines)
+    start := max(len(monitor.lines) - MONITOR_LINES, 0)
+
+    for i in start..<len(monitor.lines)
     {
         raylib.DrawTextEx(
             font,
             monitor.lines[i],
             {
                 f32(MONITOR_X + TEXT_PADDING),
-                f32(MONITOR_Y + TEXT_PADDING + i32(i) * FONT_SIZE),
+                f32(MONITOR_Y + TEXT_PADDING + i32(i - start) * FONT_SIZE),
             },
             f32(FONT_SIZE),
             FONT_SPACING,

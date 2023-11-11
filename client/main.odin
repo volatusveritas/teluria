@@ -60,6 +60,13 @@ Screen :: struct
     prompt: Prompt,
 }
 
+screen_destroy :: proc(screen: ^Screen)
+{
+    monitor_destroy(screen.monitor)
+    line_input_destroy(&screen.line_input)
+    prompt_destroy(screen.prompt)
+}
+
 LoginCredentials :: struct
 {
     username: string,
@@ -627,9 +634,7 @@ main :: proc()
         prompt = prompt_make(),
     }
 
-    defer monitor_destroy(screen.monitor)
-    defer line_input_destroy(&screen.line_input)
-    defer prompt_destroy(screen.prompt)
+    defer screen_destroy(&screen)
 
     sound_engine, ok := sound_engine_make()
 
