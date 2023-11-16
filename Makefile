@@ -5,7 +5,7 @@
 	release-client release-server release-all \
 	run-client run-server
 
-GOPTIONS = -vet-unused -vet-shadowing -vet-style -vet-semicolon
+GOPTIONS = -vet-unused -vet-shadowing -vet-style -vet-semicolon -vet-using-stmt
 LIBOPT = -no-entry-point
 TR_ALLOC = -define:TR_ALLOC=true
 DOPTIONS = -debug
