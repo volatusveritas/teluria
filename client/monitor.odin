@@ -1,7 +1,6 @@
 package client
 
 import "vendor:raylib"
-import "core:fmt"
 
 MONITOR_HEIGHT : i32 : SCREEN_HEIGHT - 3 * PADDING - LINE_INPUT_HEIGHT
 MONITOR_WIDTH  : i32 : SCREEN_WIDTH - 2 * PADDING
@@ -81,12 +80,14 @@ monitor_draw :: proc(monitor: Monitor, font: raylib.Font)
 
     for i in start..<len(monitor.lines)
     {
+        offset := FONT_SIZE * i32(len(monitor.lines) - i)
+
         raylib.DrawTextEx(
             font,
             monitor.lines[i],
             {
                 f32(MONITOR_X + TEXT_PADDING),
-                f32(MONITOR_Y + TEXT_PADDING + i32(i - start) * FONT_SIZE),
+                f32(MONITOR_Y + MONITOR_HEIGHT - PADDING - offset),
             },
             f32(FONT_SIZE),
             FONT_SPACING,
